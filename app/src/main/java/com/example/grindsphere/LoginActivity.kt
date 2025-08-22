@@ -8,7 +8,7 @@ class LoginActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            GrindSphereLogin() // Composable screen
+            GrindSphereLogin() // Call the login composable
         }
     }
 }
