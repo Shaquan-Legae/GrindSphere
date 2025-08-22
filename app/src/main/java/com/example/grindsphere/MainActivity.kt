@@ -41,7 +41,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Preview (showBackground = true)
+@Preview(showBackground = true, apiLevel = 36)
 @Composable
 fun GrindSpherePreview() {
     GrindSphereLogin()

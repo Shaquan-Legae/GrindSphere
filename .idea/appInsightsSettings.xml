@@ -8,10 +8,10 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="PLACEHOLDER" />
-                  <option name="mobileSdkAppId" value="" />
-                  <option name="projectId" value="" />
-                  <option name="projectNumber" value="" />
+                  <option name="appId" value="com.example.grindsphere" />
+                  <option name="mobileSdkAppId" value="1:869470001608:android:eed26f3513b4779b3f48fd" />
+                  <option name="projectId" value="grindsphere-3df20" />
+                  <option name="projectNumber" value="869470001608" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />
