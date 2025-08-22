@@ -27,8 +27,10 @@ fun GrindSphereLogin(isPreview: Boolean = false) {
     var password by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
 
-    // Only initialize Firebase when not in preview
     val auth: FirebaseAuth? = if (!isPreview) FirebaseAuth.getInstance() else null
+
+    // List of admin emails
+    val adminEmails = listOf("admin@example.com") // add more emails if needed
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -92,7 +94,14 @@ fun GrindSphereLogin(isPreview: Boolean = false) {
                                     loading = false
                                     if (task.isSuccessful) {
                                         Toast.makeText(context, "Login successful!", Toast.LENGTH_SHORT).show()
-                                        context.startActivity(Intent(context, MainActivity::class.java))
+
+                                        val destination = if (email in adminEmails) {
+                                            AdminActivity::class.java // Admin
+                                        } else {
+                                            MainActivity::class.java // Regular user
+                                        }
+
+                                        context.startActivity(Intent(context, destination))
                                         (context as? ComponentActivity)?.finish()
                                     } else {
                                         Toast.makeText(context, "Error: ${task.exception?.message}", Toast.LENGTH_SHORT).show()
