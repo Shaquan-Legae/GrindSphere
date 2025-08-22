@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.sp
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         setContent {
             Surface(
                 modifier = Modifier.fillMaxSize(),
@@ -41,8 +42,9 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Preview(showBackground = true, apiLevel = 36)
+// Preview version without Firebase calls
+@Preview(showBackground = true, apiLevel = 33)
 @Composable
 fun GrindSpherePreview() {
-    GrindSphereLogin()
+    GrindSphereLogin(isPreview = true)
 }

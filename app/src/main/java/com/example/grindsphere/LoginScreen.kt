@@ -21,17 +21,18 @@ import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
 
 @Composable
-fun GrindSphereLogin() {
+fun GrindSphereLogin(isPreview: Boolean = false) {
     val context = LocalContext.current
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
 
-    val auth: FirebaseAuth = FirebaseAuth.getInstance()
+    // Only initialize Firebase when not in preview
+    val auth: FirebaseAuth? = if (!isPreview) FirebaseAuth.getInstance() else null
 
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = Color(0xFF6A1B9A) // Purple background
+        color = Color(0xFF6A1B9A)
     ) {
         Column(
             modifier = Modifier
@@ -83,22 +84,23 @@ fun GrindSphereLogin() {
 
             Button(
                 onClick = {
-                    if (email.isNotEmpty() && password.isNotEmpty()) {
-                        loading = true
-                        auth.signInWithEmailAndPassword(email, password)
-                            .addOnCompleteListener { task ->
-                                loading = false
-                                if (task.isSuccessful) {
-                                    Toast.makeText(context, "Login successful!", Toast.LENGTH_SHORT).show()
-                                    // Navigate to MainActivity
-                                    context.startActivity(Intent(context, MainActivity::class.java))
-                                    (context as? ComponentActivity)?.finish()
-                                } else {
-                                    Toast.makeText(context, "Error: ${task.exception?.message}", Toast.LENGTH_SHORT).show()
+                    if (!isPreview) { // Skip Firebase in preview
+                        if (email.isNotEmpty() && password.isNotEmpty()) {
+                            loading = true
+                            auth?.signInWithEmailAndPassword(email, password)
+                                ?.addOnCompleteListener { task ->
+                                    loading = false
+                                    if (task.isSuccessful) {
+                                        Toast.makeText(context, "Login successful!", Toast.LENGTH_SHORT).show()
+                                        context.startActivity(Intent(context, MainActivity::class.java))
+                                        (context as? ComponentActivity)?.finish()
+                                    } else {
+                                        Toast.makeText(context, "Error: ${task.exception?.message}", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
-                            }
-                    } else {
-                        Toast.makeText(context, "Please fill in all fields", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "Please fill in all fields", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 },
                 modifier = Modifier
@@ -121,8 +123,9 @@ fun GrindSphereLogin() {
     }
 }
 
-@Preview (showBackground = true)
+// Safe preview
+@Preview(showBackground = true, apiLevel = 33)
 @Composable
 fun GrindSphereLoginPreview() {
-    GrindSphereLogin()
+    GrindSphereLogin(isPreview = true)
 }
