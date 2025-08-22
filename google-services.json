@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "869470001608",
+    "project_id": "grindsphere-3df20",
+    "storage_bucket": "grindsphere-3df20.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:869470001608:android:eed26f3513b4779b3f48fd",
+        "android_client_info": {
+          "package_name": "com.example.grindsphere"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCcn-slwGxtAKPPKyeCWZbiyeN7qnIKxeM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
