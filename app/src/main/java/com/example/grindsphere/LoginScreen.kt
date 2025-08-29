@@ -19,6 +19,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
+import kotlin.collections.listOf
 
 @Composable
 fun GrindSphereLogin(isPreview: Boolean = false) {
@@ -62,7 +63,10 @@ fun GrindSphereLogin(isPreview: Boolean = false) {
                     focusedBorderColor = Color.White,
                     unfocusedBorderColor = Color.LightGray,
                     focusedLabelColor = Color.White,
-                    cursorColor = Color.White
+                    cursorColor = Color.White,
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    unfocusedLabelColor = Color.LightGray
                 )
             )
             Spacer(modifier = Modifier.height(16.dp))
@@ -79,7 +83,10 @@ fun GrindSphereLogin(isPreview: Boolean = false) {
                     focusedBorderColor = Color.White,
                     unfocusedBorderColor = Color.LightGray,
                     focusedLabelColor = Color.White,
-                    cursorColor = Color.White
+                    cursorColor = Color.White,
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    unfocusedLabelColor = Color.LightGray
                 )
             )
             Spacer(modifier = Modifier.height(24.dp))
