@@ -1,6 +1,7 @@
 package com.example.grindsphere
 
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -8,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
@@ -43,7 +45,7 @@ fun ExperimentSignupScreen() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text("Create Account", style = MaterialTheme.typography.headlineMedium)
+            Text("Create an Account", style = MaterialTheme.typography.headlineMedium)
             Spacer(modifier = Modifier.height(24.dp))
 
             Text("I am a:", style = MaterialTheme.typography.titleMedium)
@@ -67,7 +69,9 @@ fun ExperimentSignupScreen() {
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier
+                .background(color=Color.Black)
+                .height(16.dp))
 
             OutlinedTextField(
                 value = name,
