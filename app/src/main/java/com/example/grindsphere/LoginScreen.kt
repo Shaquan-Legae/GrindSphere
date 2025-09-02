@@ -18,7 +18,10 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.grindsphere.customer.CustomerDashboardActivity
+import com.example.grindsphere.hustler.HustlerDashboardActivity
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlin.collections.listOf
 
 @Composable
@@ -29,6 +32,7 @@ fun GrindSphereLogin(isPreview: Boolean = false) {
     var loading by remember { mutableStateOf(false) }
 
     val auth: FirebaseAuth? = if (!isPreview) FirebaseAuth.getInstance() else null
+    val firestore: FirebaseFirestore? = if (!isPreview) FirebaseFirestore.getInstance() else null
 
     // List of admin emails
     val adminEmails = listOf("admin@example.com") // add more emails if needed
@@ -98,19 +102,33 @@ fun GrindSphereLogin(isPreview: Boolean = false) {
                             loading = true
                             auth?.signInWithEmailAndPassword(email, password)
                                 ?.addOnCompleteListener { task ->
-                                    loading = false
                                     if (task.isSuccessful) {
-                                        Toast.makeText(context, "Login successful!", Toast.LENGTH_SHORT).show()
-
-                                        val destination = if (email in adminEmails) {
-                                            AdminActivity::class.java // Admin
-                                        } else {
-                                            MainActivity::class.java // Regular user
+                                        val user = auth.currentUser
+                                        if (user != null) {
+                                            firestore?.collection("users")?.document(user.uid)?.get()
+                                                ?.addOnSuccessListener { document ->
+                                                    loading = false
+                                                    if (document != null) {
+                                                        val role = document.getString("role")
+                                                        val destination = when (role) {
+                                                            "HUSTLER" -> HustlerDashboardActivity::class.java
+                                                            "CUSTOMER" -> CustomerDashboardActivity::class.java
+                                                            else -> MainActivity::class.java
+                                                        }
+                                                        Toast.makeText(context, "Login successful!", Toast.LENGTH_SHORT).show()
+                                                        context.startActivity(Intent(context, destination))
+                                                        (context as? ComponentActivity)?.finish()
+                                                    } else {
+                                                        Toast.makeText(context, "Error: User data not found", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                                ?.addOnFailureListener { e ->
+                                                    loading = false
+                                                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                                                }
                                         }
-
-                                        context.startActivity(Intent(context, destination))
-                                        (context as? ComponentActivity)?.finish()
                                     } else {
+                                        loading = false
                                         Toast.makeText(context, "Error: ${task.exception?.message}", Toast.LENGTH_SHORT).show()
                                     }
                                 }
@@ -134,6 +152,12 @@ fun GrindSphereLogin(isPreview: Boolean = false) {
                 } else {
                     Text("Login", fontSize = 18.sp, color = Color.White)
                 }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            TextButton(onClick = {
+                context.startActivity(Intent(context, SignupActivity::class.java))
+            }) {
+                Text("Don't have an account? Sign Up", color = Color.White)
             }
         }
     }

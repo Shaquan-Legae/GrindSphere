@@ -34,12 +34,30 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        
+
         <!-- AdminActivity is declared but not launcher -->
         <activity
             android:name=".AdminActivity"
             android:exported="true"
             android:label="Admin" />
+        
+        <activity
+            android:name=".SignupActivity"
+            android:exported="false"
+            android:label="Sign Up"
+            android:theme="@style/Theme.GrindSphere" />
+
+        <activity
+            android:name=".hustler.HustlerDashboardActivity"
+            android:exported="false"
+            android:label="Hustler Dashboard"
+            android:theme="@style/Theme.GrindSphere" />
+
+        <activity
+            android:name=".customer.CustomerDashboardActivity"
+            android:exported="false"
+            android:label="Customer Dashboard"
+            android:theme="@style/Theme.GrindSphere" />
 
     </application>
 

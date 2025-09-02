@@ -1,187 +1,231 @@
 package com.example.grindsphere
 
 import android.widget.Toast
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.ktx.auth
-import com.google.firebase.firestore.ktx.firestore
-import com.google.firebase.ktx.Firebase
-import kotlinx.coroutines.launch
-import kotlin.text.isBlank
+import com.google.firebase.firestore.FirebaseFirestore
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ExperimentSignupScreen() {
+fun ExperimentSignupScreen(isPreview: Boolean = false) {
+    val context = LocalContext.current
     var name by remember { mutableStateOf("") }
     var surname by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var userRole by remember { mutableStateOf<UserRole?>(null) }
-    var isLoading by remember { mutableStateOf(false) }
+    var loading by remember { mutableStateOf(false) }
 
-    val scope = rememberCoroutineScope()
-    val context = LocalContext.current
-    val auth: FirebaseAuth = Firebase.auth
-    val firestore = Firebase.firestore
+    val auth: FirebaseAuth? = if (!isPreview) FirebaseAuth.getInstance() else null
+    val firestore: FirebaseFirestore? = if (!isPreview) FirebaseFirestore.getInstance() else null
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = Color(0xFF6A1B9A)
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
+                .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text("Create an Account", style = MaterialTheme.typography.headlineMedium)
-            Spacer(modifier = Modifier.height(24.dp))
+            Text(
+                text = "Create an Account",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            Spacer(modifier = Modifier.height(32.dp))
 
-            Text("I am a:", style = MaterialTheme.typography.titleMedium)
+            // Role Selection
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                Button(onClick = { userRole = UserRole.HUSTLER }, enabled = !isLoading) {
-                    Text("Hustler")
+                Button(
+                    onClick = { userRole = UserRole.HUSTLER },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (userRole == UserRole.HUSTLER) Color(0xFF8E24AA) else Color.White
+                    )
+                ) {
+                    Text("Hustler", color = if (userRole == UserRole.HUSTLER) Color.White else Color.Black)
                 }
-                Button(onClick = { userRole = UserRole.CUSTOMER }, enabled = !isLoading) {
-                    Text("Customer")
+                Button(
+                    onClick = { userRole = UserRole.CUSTOMER },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (userRole == UserRole.CUSTOMER) Color(0xFF8E24AA) else Color.White
+                    )
+                ) {
+                    Text("Customer", color = if (userRole == UserRole.CUSTOMER) Color.White else Color.Black)
                 }
             }
-
-            if (userRole != null) {
-                Text(
-                    "Selected role: ${userRole!!.name}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier
-                .background(color=Color.Black)
-                .height(16.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
                 label = { Text("Name") },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !isLoading
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color.White,
+                    unfocusedBorderColor = Color.LightGray,
+                    focusedLabelColor = Color.White,
+                    cursorColor = Color.White,
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    unfocusedLabelColor = Color.LightGray
+                )
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(16.dp))
             OutlinedTextField(
                 value = surname,
                 onValueChange = { surname = it },
                 label = { Text("Surname") },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !isLoading
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color.White,
+                    unfocusedBorderColor = Color.LightGray,
+                    focusedLabelColor = Color.White,
+                    cursorColor = Color.White,
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    unfocusedLabelColor = Color.LightGray
+                )
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+
             OutlinedTextField(
                 value = email,
                 onValueChange = { email = it },
                 label = { Text("Email") },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !isLoading
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color.White,
+                    unfocusedBorderColor = Color.LightGray,
+                    focusedLabelColor = Color.White,
+                    cursorColor = Color.White,
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    unfocusedLabelColor = Color.LightGray
+                )
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
                 label = { Text("Password") },
                 modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
-                enabled = !isLoading
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color.White,
+                    unfocusedBorderColor = Color.LightGray,
+                    focusedLabelColor = Color.White,
+                    cursorColor = Color.White,
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    unfocusedLabelColor = Color.LightGray
+                )
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(16.dp))
             OutlinedTextField(
                 value = confirmPassword,
                 onValueChange = { confirmPassword = it },
                 label = { Text("Confirm Password") },
                 modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
-                enabled = !isLoading
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color.White,
+                    unfocusedBorderColor = Color.LightGray,
+                    focusedLabelColor = Color.White,
+                    cursorColor = Color.White,
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    unfocusedLabelColor = Color.LightGray
+                )
             )
             Spacer(modifier = Modifier.height(24.dp))
 
             Button(
                 onClick = {
-                    scope.launch {
-                        // 1. Validate Input
-                        if (userRole == null) {
-                            Toast.makeText(context, "Please select a role", Toast.LENGTH_SHORT).show()
-                            return@launch
-                        }
-                        if (name.isBlank() || surname.isBlank() || email.isBlank() || password.isBlank()) {
-                            Toast.makeText(context, "Please fill all fields", Toast.LENGTH_SHORT).show()
-                            return@launch
-                        }
-                        if (password != confirmPassword) {
-                            Toast.makeText(context, "Passwords do not match", Toast.LENGTH_SHORT).show()
-                            return@launch
-                        }
-
-                        isLoading = true // Show loading spinner
-
-                        // 2. Call Firebase Auth
-                        auth.createUserWithEmailAndPassword(email, password)
-                            .addOnCompleteListener { task ->
-                                if (task.isSuccessful) {
-                                    val firebaseUser = auth.currentUser
-                                    firebaseUser?.let {
-                                        // 3. Save user details to Firestore
-                                        val userMap = kotlin.collections.hashMapOf(
-                                            "name" to name,
-                                            "surname" to surname,
-                                            "email" to email,
-                                            "role" to userRole!!.name
-                                        )
-                                        firestore.collection("users").document(it.uid).set(userMap)
-                                            .addOnSuccessListener {
-                                                Toast.makeText(context, "Signup successful! Welcome!", Toast.LENGTH_LONG).show()
-                                                // Clear fields
-                                                name = ""
-                                                surname = ""
-                                                email = ""
-                                                password = ""
-                                                confirmPassword = ""
-                                                userRole = null
-                                                isLoading = false
+                    if (!isPreview) {
+                        if (name.isNotEmpty() && surname.isNotEmpty() && email.isNotEmpty() && password.isNotEmpty() && confirmPassword.isNotEmpty() && userRole != null) {
+                            if (password == confirmPassword) {
+                                loading = true
+                                auth?.createUserWithEmailAndPassword(email, password)
+                                    ?.addOnCompleteListener { task ->
+                                        if (task.isSuccessful) {
+                                            val user = auth.currentUser
+                                            if (user != null) {
+                                                val userMap = hashMapOf(
+                                                    "name" to name,
+                                                    "surname" to surname,
+                                                    "email" to email,
+                                                    "role" to userRole!!.name
+                                                )
+                                                firestore?.collection("users")?.document(user.uid)?.set(userMap)
+                                                    ?.addOnSuccessListener {
+                                                        loading = false
+                                                        Toast.makeText(context, "Signup successful!", Toast.LENGTH_SHORT).show()
+                                                        // Optionally, navigate to login or dashboard
+                                                    }
+                                                    ?.addOnFailureListener { e ->
+                                                        loading = false
+                                                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                                                    }
                                             }
-                                            .addOnFailureListener { e ->
-                                                Toast.makeText(context, "Error saving user data: ${e.message}", Toast.LENGTH_LONG).show()
-                                                isLoading = false
-                                            }
+                                        } else {
+                                            loading = false
+                                            Toast.makeText(context, "Error: ${task.exception?.message}", Toast.LENGTH_SHORT).show()
+                                        }
                                     }
-                                } else {
-                                    val exception = task.exception
-                                    Toast.makeText(context, "Authentication failed: ${exception?.message}", Toast.LENGTH_LONG).show()
-                                    isLoading = false // Hide loading spinner
-                                }
+                            } else {
+                                Toast.makeText(context, "Passwords do not match", Toast.LENGTH_SHORT).show()
                             }
+                        } else {
+                            Toast.makeText(context, "Please fill in all fields and select a role", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !isLoading
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8E24AA))
             ) {
-                Text("Sign Up")
+                if (loading) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(20.dp)
+                    )
+                } else {
+                    Text("Sign Up", fontSize = 18.sp, color = Color.White)
+                }
             }
-        }
-
-        if (isLoading) {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
         }
     }
 }
@@ -191,8 +235,8 @@ enum class UserRole {
     CUSTOMER
 }
 
-@Preview(showBackground = true)
+@Preview(showBackground = true, apiLevel = 33)
 @Composable
 fun ExperimentSignupScreenPreview() {
-    ExperimentSignupScreen()
+    ExperimentSignupScreen(isPreview = true)
 }
