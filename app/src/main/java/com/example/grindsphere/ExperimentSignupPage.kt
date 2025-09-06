@@ -235,7 +235,7 @@ enum class UserRole {
     CUSTOMER
 }
 
-@Preview(showBackground = true, apiLevel = 33)
+@Preview(showBackground = true, apiLevel = 35)
 @Composable
 fun ExperimentSignupScreenPreview() {
     ExperimentSignupScreen(isPreview = true)

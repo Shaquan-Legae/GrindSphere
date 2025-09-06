@@ -72,4 +72,19 @@ dependencies {
     // Debugging
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+
+    // Compose + navigation
+    implementation("androidx.compose.ui:ui:1.5.0")
+    implementation("androidx.compose.material3:material3:1.2.0")
+    implementation("androidx.navigation:navigation-compose:2.6.0")
+// Coil (image loading)
+    implementation("io.coil-kt:coil-compose:2.3.0")
+// Firebase (Auth, Firestore, Storage)
+    implementation("com.google.firebase:firebase-auth:22.0.0")
+    implementation("com.google.firebase:firebase-firestore-ktx:24.5.0")
+    implementation("com.google.firebase:firebase-storage-ktx:20.1.0")
+// Optional: Accompanist (if you want paging/placeholder)
+    implementation("com.google.accompanist:accompanist-systemuicontroller:0.30.1")
+
+    
 }

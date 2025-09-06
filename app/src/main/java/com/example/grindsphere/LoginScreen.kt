@@ -164,7 +164,7 @@ fun GrindSphereLogin(isPreview: Boolean = false) {
 }
 
 // Safe preview
-@Preview(showBackground = true, apiLevel = 33)
+@Preview(showBackground = true, apiLevel = 35)
 @Composable
 fun GrindSphereLoginPreview() {
     GrindSphereLogin(isPreview = true)

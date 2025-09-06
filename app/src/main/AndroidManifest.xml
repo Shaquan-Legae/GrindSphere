@@ -59,6 +59,9 @@
             android:label="Customer Dashboard"
             android:theme="@style/Theme.GrindSphere" />
 
+        <activity android:name=".hustler.EditServiceActivity"/>
+
+
     </application>
 
 </manifest>
