@@ -86,5 +86,5 @@ dependencies {
 // Optional: Accompanist (if you want paging/placeholder)
     implementation("com.google.accompanist:accompanist-systemuicontroller:0.30.1")
 
-    
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3") // Or the latest version
 }
