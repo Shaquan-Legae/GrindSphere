@@ -25,7 +25,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlin.collections.listOf
 
 @Composable
-fun GrindSphereLogin(isPreview: Boolean = false) {
+fun GrindSphereLogin(isPreview: Boolean = false, onNavigateToSignup: () -> Unit) {
     val context = LocalContext.current
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -164,8 +164,8 @@ fun GrindSphereLogin(isPreview: Boolean = false) {
 }
 
 // Safe preview
-@Preview(showBackground = true, apiLevel = 35)
+@Preview(showBackground = true, apiLevel = 33)
 @Composable
 fun GrindSphereLoginPreview() {
-    GrindSphereLogin(isPreview = true)
+    GrindSphereLogin(isPreview = true, onNavigateToSignup = {})
 }

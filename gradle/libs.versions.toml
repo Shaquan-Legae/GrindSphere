@@ -1,5 +1,5 @@
 [versions]
-agp = "8.12.2"
+agp = "8.13.0"
 firebaseBomVersion = "34.1.0"
 kotlin = "2.0.21"
 coreKtx = "1.10.1"
@@ -11,6 +11,7 @@ activityCompose = "1.8.0"
 composeBom = "2024.09.00"
 firebaseAuthKtx = "24.0.1"
 firebaseBom = "33.2.0"
+navigationRuntimeKtx = "2.9.3"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -32,6 +33,7 @@ androidx-material3 = { group = "androidx.compose.material3", name = "material3" 
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 firebase-auth = { group = "com.google.firebase", name = "firebase-auth-ktx" }
 firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics-ktx" }
+androidx-navigation-runtime-ktx = { group = "androidx.navigation", name = "navigation-runtime-ktx", version.ref = "navigationRuntimeKtx" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

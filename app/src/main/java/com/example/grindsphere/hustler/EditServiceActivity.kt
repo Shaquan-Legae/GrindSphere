@@ -15,6 +15,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -108,18 +110,36 @@ fun EditServiceScreen(serviceId: String?) {
             }
         } catch (e: Exception) {
             Toast.makeText(context, "Image upload failed: ${e.message}", Toast.LENGTH_LONG).show()
-            // Optionally, you might want to throw the exception or handle it more gracefully
-            // For now, we'll return the URLs that were successfully uploaded up to this point
         } finally {
             imagesUploading = false
         }
         return existingImageUrls + uploadedUrls // Combine with existing URLs
     }
 
-
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(if (serviceId != null) "Edit Service" else "Add Service") })
+            TopAppBar(
+                title = { Text(if (serviceId != null) "Edit Service" else "Add Service") },
+                actions = {
+                    IconButton(
+                        onClick = {
+                            // Navigate back to HustlerDashboardActivity
+                            context.startActivity(
+                                android.content.Intent(context, HustlerDashboardActivity::class.java)
+                            )
+                            if (context is EditServiceActivity) {
+                                context.finish()
+                            }
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "Back to Dashboard",
+                            tint = Color.DarkGray
+                        )
+                    }
+                }
+            )
         }
     ) { paddingValues ->
         Column(
@@ -192,15 +212,9 @@ fun EditServiceScreen(serviceId: String?) {
                                 .size(100.dp)
                                 .clip(RoundedCornerShape(8.dp))
                                 .clickable {
-                                    // Remove image
-                                    // Check if it's an existing URL or a new URI
                                     if (existingImageUrls.contains(imageUrlOrUri)) {
                                         existingImageUrls = existingImageUrls - imageUrlOrUri
-                                        // Optional: Delete from Firebase Storage if it's an existing image
-                                        // val imageRef = storage.getReferenceFromUrl(imageUrlOrUri)
-                                        // imageRef.delete().addOnSuccessListener { Log.d("EditService", "Image deleted from storage") }
                                     } else {
-                                        // It's a URI, find and remove it from imageUris
                                         val uriToRemove = imageUris.find { it.toString() == imageUrlOrUri }
                                         uriToRemove?.let { imageUris = imageUris - it }
                                     }
@@ -215,7 +229,7 @@ fun EditServiceScreen(serviceId: String?) {
                             .size(100.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(Color.LightGray)
-                            .clickable { launcher.launch("image/*") }, // Allow multiple selections
+                            .clickable { launcher.launch("image/*") },
                         contentAlignment = Alignment.Center
                     ) {
                         Text("+")
@@ -230,17 +244,14 @@ fun EditServiceScreen(serviceId: String?) {
                     coroutineScope.launch {
                         loading = true
                         try {
-                            // 1. Upload new images and get their URLs
-                            val uploadedNewImageUrls = uploadImagesAndGetUrls(imageUris) // This function is now suspend
-
-                            // 2. Combine with existing URLs that weren't removed
-                            val finalImageUrls = uploadedNewImageUrls // uploadImagesAndGetUrls already combines them
+                            val uploadedNewImageUrls = uploadImagesAndGetUrls(imageUris)
+                            val finalImageUrls = uploadedNewImageUrls
 
                             val data = hashMapOf(
                                 "name" to serviceName,
                                 "description" to description,
                                 "location" to location,
-                                "images" to finalImageUrls, // Save the final list of URLs
+                                "images" to finalImageUrls,
                                 "ownerUid" to auth.currentUser!!.uid
                             )
                             val docRef = if (serviceId != null) {
@@ -249,18 +260,13 @@ fun EditServiceScreen(serviceId: String?) {
                                 firestore.collection("services").document()
                             }
 
-                            docRef.set(data).await() // Use await for Firestore operation
+                            docRef.set(data).await()
 
                             Toast.makeText(context, "Service saved!", Toast.LENGTH_SHORT).show()
-                            // Clear new image URIs after successful save
                             imageUris = listOf()
-                            // If it's a new service, you might want to fetch the updated existingImageUrls
-                            // or navigate away, etc.
                             if (serviceId == null) {
-                                // Potentially navigate back or clear the form
-                                (context as? EditServiceActivity)?.finish() // Example: Finish activity
+                                (context as? EditServiceActivity)?.finish()
                             } else {
-                                // For existing service, update the existingImageUrls to reflect the saved state
                                 existingImageUrls = finalImageUrls
                             }
 
@@ -271,7 +277,7 @@ fun EditServiceScreen(serviceId: String?) {
                         }
                     }
                 },
-                enabled = !imagesUploading, // Disable button while images are uploading
+                enabled = !imagesUploading,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 if (loading || imagesUploading) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)

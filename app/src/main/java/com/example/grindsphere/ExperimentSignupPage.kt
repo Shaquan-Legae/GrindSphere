@@ -1,8 +1,8 @@
 package com.example.grindsphere
 
+import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -16,11 +16,15 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 
 @Composable
-fun ExperimentSignupScreen(isPreview: Boolean = false) {
+fun ExperimentSignupScreen(
+    navController: NavController? = null,
+    isPreview: Boolean = false
+) {
     val context = LocalContext.current
     var name by remember { mutableStateOf("") }
     var surname by remember { mutableStateOf("") }
@@ -52,7 +56,7 @@ fun ExperimentSignupScreen(isPreview: Boolean = false) {
             )
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Role Selection
+            // Role selection
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
@@ -63,7 +67,10 @@ fun ExperimentSignupScreen(isPreview: Boolean = false) {
                         containerColor = if (userRole == UserRole.HUSTLER) Color(0xFF8E24AA) else Color.White
                     )
                 ) {
-                    Text("Hustler", color = if (userRole == UserRole.HUSTLER) Color.White else Color.Black)
+                    Text(
+                        "Hustler",
+                        color = if (userRole == UserRole.HUSTLER) Color.White else Color.Black
+                    )
                 }
                 Button(
                     onClick = { userRole = UserRole.CUSTOMER },
@@ -71,65 +78,46 @@ fun ExperimentSignupScreen(isPreview: Boolean = false) {
                         containerColor = if (userRole == UserRole.CUSTOMER) Color(0xFF8E24AA) else Color.White
                     )
                 ) {
-                    Text("Customer", color = if (userRole == UserRole.CUSTOMER) Color.White else Color.Black)
+                    Text(
+                        "Customer",
+                        color = if (userRole == UserRole.CUSTOMER) Color.White else Color.Black
+                    )
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Name
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
                 label = { Text("Name") },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color.White,
-                    unfocusedBorderColor = Color.LightGray,
-                    focusedLabelColor = Color.White,
-                    cursorColor = Color.White,
-                    focusedTextColor = Color.Black,
-                    unfocusedTextColor = Color.Black,
-                    unfocusedLabelColor = Color.LightGray
-                )
+                singleLine = true
             )
             Spacer(modifier = Modifier.height(16.dp))
+
+            // Surname
             OutlinedTextField(
                 value = surname,
                 onValueChange = { surname = it },
                 label = { Text("Surname") },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color.White,
-                    unfocusedBorderColor = Color.LightGray,
-                    focusedLabelColor = Color.White,
-                    cursorColor = Color.White,
-                    focusedTextColor = Color.Black,
-                    unfocusedTextColor = Color.Black,
-                    unfocusedLabelColor = Color.LightGray
-                )
+                singleLine = true
             )
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Email
             OutlinedTextField(
                 value = email,
                 onValueChange = { email = it },
                 label = { Text("Email") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color.White,
-                    unfocusedBorderColor = Color.LightGray,
-                    focusedLabelColor = Color.White,
-                    cursorColor = Color.White,
-                    focusedTextColor = Color.Black,
-                    unfocusedTextColor = Color.Black,
-                    unfocusedLabelColor = Color.LightGray
-                )
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
             )
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Password
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
@@ -137,18 +125,11 @@ fun ExperimentSignupScreen(isPreview: Boolean = false) {
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color.White,
-                    unfocusedBorderColor = Color.LightGray,
-                    focusedLabelColor = Color.White,
-                    cursorColor = Color.White,
-                    focusedTextColor = Color.Black,
-                    unfocusedTextColor = Color.Black,
-                    unfocusedLabelColor = Color.LightGray
-                )
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
             )
             Spacer(modifier = Modifier.height(16.dp))
+
+            // Confirm password
             OutlinedTextField(
                 value = confirmPassword,
                 onValueChange = { confirmPassword = it },
@@ -156,23 +137,18 @@ fun ExperimentSignupScreen(isPreview: Boolean = false) {
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color.White,
-                    unfocusedBorderColor = Color.LightGray,
-                    focusedLabelColor = Color.White,
-                    cursorColor = Color.White,
-                    focusedTextColor = Color.Black,
-                    unfocusedTextColor = Color.Black,
-                    unfocusedLabelColor = Color.LightGray
-                )
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
             )
             Spacer(modifier = Modifier.height(24.dp))
 
+            // Sign Up Button
             Button(
                 onClick = {
                     if (!isPreview) {
-                        if (name.isNotEmpty() && surname.isNotEmpty() && email.isNotEmpty() && password.isNotEmpty() && confirmPassword.isNotEmpty() && userRole != null) {
+                        if (name.isNotEmpty() && surname.isNotEmpty() && email.isNotEmpty()
+                            && password.isNotEmpty() && confirmPassword.isNotEmpty()
+                            && userRole != null
+                        ) {
                             if (password == confirmPassword) {
                                 loading = true
                                 auth?.createUserWithEmailAndPassword(email, password)
@@ -186,34 +162,55 @@ fun ExperimentSignupScreen(isPreview: Boolean = false) {
                                                     "email" to email,
                                                     "role" to userRole!!.name
                                                 )
-                                                firestore?.collection("users")?.document(user.uid)?.set(userMap)
+                                                firestore?.collection("users")
+                                                    ?.document(user.uid)?.set(userMap)
                                                     ?.addOnSuccessListener {
                                                         loading = false
-                                                        Toast.makeText(context, "Signup successful!", Toast.LENGTH_SHORT).show()
-                                                        // Optionally, navigate to login or dashboard
+                                                        Toast.makeText(
+                                                            context,
+                                                            "Signup successful!",
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
+                                                        navController?.navigate("login")
                                                     }
                                                     ?.addOnFailureListener { e ->
                                                         loading = false
-                                                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                                                        Toast.makeText(
+                                                            context,
+                                                            "Error: ${e.message}",
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
                                                     }
                                             }
                                         } else {
                                             loading = false
-                                            Toast.makeText(context, "Error: ${task.exception?.message}", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(
+                                                context,
+                                                "Error: ${task.exception?.message}",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
                                         }
                                     }
                             } else {
-                                Toast.makeText(context, "Passwords do not match", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(
+                                    context,
+                                    "Passwords do not match",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             }
                         } else {
-                            Toast.makeText(context, "Please fill in all fields and select a role", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                context,
+                                "Please fill in all fields and select a role",
+                                Toast.LENGTH_SHORT
+                            ).show()
                         }
                     }
                 },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp),
-                shape = RoundedCornerShape(12.dp),
+                shape = MaterialTheme.shapes.medium,
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8E24AA))
             ) {
                 if (loading) {
@@ -225,6 +222,14 @@ fun ExperimentSignupScreen(isPreview: Boolean = false) {
                 } else {
                     Text("Sign Up", fontSize = 18.sp, color = Color.White)
                 }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            TextButton(onClick = {
+                context.startActivity(Intent(context, LoginActivity::class.java))
+            }) {
+                Text("Have an account? Login.", color = Color.White)
             }
         }
     }
