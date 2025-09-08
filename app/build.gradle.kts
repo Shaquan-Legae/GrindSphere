@@ -47,7 +47,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
-    
+
 
     // Compose
     implementation(platform(libs.androidx.compose.bom))
@@ -55,12 +55,16 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    implementation("androidx.compose.material3:material3:1.3.2")
+
 
     // ✅ Firebase (use the BOM once, no version numbers in dependencies)
     implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-analytics-ktx")
     implementation("com.google.firebase:firebase-firestore-ktx")
+    implementation(libs.androidx.navigation.runtime.ktx)
+    implementation(libs.androidx.compose.runtime)
 
     // Testing
     testImplementation(libs.junit)
@@ -79,6 +83,8 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.6.0")
 // Coil (image loading)
     implementation("io.coil-kt:coil-compose:2.3.0")
+    implementation("androidx.compose.material:material-icons-extended-android:1.6.8") // Or the latest version
+
 // Firebase (Auth, Firestore, Storage)
     implementation("com.google.firebase:firebase-auth:22.0.0")
     implementation("com.google.firebase:firebase-firestore-ktx:24.5.0")
