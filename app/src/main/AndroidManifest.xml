@@ -76,6 +76,11 @@
             android:label="Chat"
             android:theme="@style/Theme.GrindSphere" />
 
+        <activity android:name=".hustler.HomePageActivity" />
+
+
+
+
     </application>
 
 </manifest>

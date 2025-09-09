@@ -23,7 +23,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
-import com.example.grindsphere.ServiceDetailActivity
+import com.example.grindsphere.hustler.ServiceDetailActivity
 import com.google.firebase.firestore.FirebaseFirestore
 
 data class ServiceCard(
@@ -136,6 +136,7 @@ fun HomePageScreen() {
         }
     }
 }
+
 
 @Composable
 fun BigServiceCard(service: ServiceCard) {

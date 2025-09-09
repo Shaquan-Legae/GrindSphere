@@ -127,7 +127,14 @@ fun HustlerDashboard() {
             NavigationBar(containerColor = Color.White) {
                 NavigationBarItem(
                     selected = selectedTab == 3,
-                    onClick = { selectedTab = 3; showSearchBar = false; showMessagesScreen = false },
+                    onClick = {
+                        selectedTab = 3
+                        showSearchBar = false
+                        showMessagesScreen = false
+                        val intent = Intent(context, HomePageActivity::class.java)
+                        context.startActivity(intent)
+                        (context as? ComponentActivity)?.finish() // Optionally finish current activity
+                    },
                     icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
                     label = { Text("Home") }
                 )
@@ -145,7 +152,7 @@ fun HustlerDashboard() {
                 )
                 NavigationBarItem(
                     selected = selectedTab == 0,
-                    onClick = { selectedTab = 0; showMessagesScreen = false },
+                    onClick = { selectedTab = 0; showMessagesScreen = false }, // This will show the main dashboard content
                     icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
                     label = { Text("Profile") }
                 )
