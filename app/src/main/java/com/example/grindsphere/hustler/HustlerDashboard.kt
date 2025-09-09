@@ -34,7 +34,7 @@ import com.example.grindsphere.R
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 
-data class ServiceCard(
+data class HustlerServiceCard(
     val id: String,
     val name: String,
     val imageUrl: String,
@@ -51,7 +51,7 @@ fun HustlerDashboard() {
 
     var hustlerName by remember { mutableStateOf("Hustler") }
     var profilePicUrl by remember { mutableStateOf("") }
-    var services by remember { mutableStateOf(listOf<ServiceCard>()) }
+    var services by remember { mutableStateOf(listOf<HustlerServiceCard>()) }
     var totalViews by remember { mutableStateOf(0L) }
     var showMenu by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableStateOf(3) } // Default Home
@@ -81,7 +81,7 @@ fun HustlerDashboard() {
                         return@addSnapshotListener
                     }
                     val list = snapshot?.documents?.map { doc ->
-                        ServiceCard(
+                        HustlerServiceCard(
                             id = doc.id,
                             name = doc.getString("name") ?: "Service",
                             imageUrl = doc.getString("imageUrl") ?: "",
