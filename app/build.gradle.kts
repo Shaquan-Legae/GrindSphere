@@ -42,6 +42,7 @@ android {
     }
 }
 
+
 dependencies {
     // Core Android
     implementation(libs.androidx.core.ktx)
@@ -56,6 +57,7 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation("androidx.compose.material3:material3:1.3.2")
+    implementation("androidx.compose.material:material-icons-extended-android:1.6.7")
 
     // ✅ Firebase (use the BOM once, no version numbers in dependencies)
     implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
@@ -63,6 +65,7 @@ dependencies {
     implementation("com.google.firebase:firebase-analytics-ktx")
     implementation("com.google.firebase:firebase-firestore-ktx")
     implementation(libs.androidx.navigation.runtime.ktx)
+    implementation(libs.androidx.compose.animation.core.lint)
 
     // Testing
     testImplementation(libs.junit)

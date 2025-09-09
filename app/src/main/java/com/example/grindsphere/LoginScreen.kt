@@ -6,6 +6,10 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+// --- NEW: Imports for the visibility toggle icons ---
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,11 +19,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation // <-- Import VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.grindsphere.customer.CustomerDashboardActivity
 import com.example.grindsphere.hustler.HustlerDashboardActivity
+// import com.example.grindsphere.admin.AdminDashboardActivity // <-- You will need to create this activity
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlin.collections.listOf
@@ -30,12 +36,14 @@ fun GrindSphereLogin(isPreview: Boolean = false, onNavigateToSignup: () -> Unit)
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
+    // --- NEW: State for password visibility ---
+    var passwordVisible by remember { mutableStateOf(false) }
 
     val auth: FirebaseAuth? = if (!isPreview) FirebaseAuth.getInstance() else null
     val firestore: FirebaseFirestore? = if (!isPreview) FirebaseFirestore.getInstance() else null
 
     // List of admin emails
-    val adminEmails = listOf("admin@example.com") // add more emails if needed
+    val adminEmails = listOf("admin@example.com", "sihle.banda@admin.com") // Added a second example
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -58,7 +66,7 @@ fun GrindSphereLogin(isPreview: Boolean = false, onNavigateToSignup: () -> Unit)
 
             OutlinedTextField(
                 value = email,
-                onValueChange = { email = it },
+                onValueChange = { email = it.trim() }, // Trim whitespace
                 label = { Text("Email") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
@@ -68,6 +76,7 @@ fun GrindSphereLogin(isPreview: Boolean = false, onNavigateToSignup: () -> Unit)
                     unfocusedBorderColor = Color.LightGray,
                     focusedLabelColor = Color.White,
                     cursorColor = Color.White,
+                    // To make text visible on the default white background of the text field
                     focusedTextColor = Color.Black,
                     unfocusedTextColor = Color.Black,
                     unfocusedLabelColor = Color.LightGray
@@ -75,19 +84,32 @@ fun GrindSphereLogin(isPreview: Boolean = false, onNavigateToSignup: () -> Unit)
             )
             Spacer(modifier = Modifier.height(16.dp))
 
+            // --- MODIFIED: Password field with visibility toggle ---
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
                 label = { Text("Password") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
+                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                trailingIcon = {
+                    val image = if (passwordVisible)
+                        Icons.Filled.Visibility
+                    else Icons.Filled.VisibilityOff
+
+                    val description = if (passwordVisible) "Hide password" else "Show password"
+
+                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                        Icon(imageVector = image, description, tint = Color.White)
+                    }
+                },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Color.White,
                     unfocusedBorderColor = Color.LightGray,
                     focusedLabelColor = Color.White,
                     cursorColor = Color.White,
+                    // To make text visible on the default white background of the text field
                     focusedTextColor = Color.Black,
                     unfocusedTextColor = Color.Black,
                     unfocusedLabelColor = Color.LightGray
@@ -103,33 +125,44 @@ fun GrindSphereLogin(isPreview: Boolean = false, onNavigateToSignup: () -> Unit)
                             auth?.signInWithEmailAndPassword(email, password)
                                 ?.addOnCompleteListener { task ->
                                     if (task.isSuccessful) {
-                                        val user = auth.currentUser
-                                        if (user != null) {
-                                            firestore?.collection("users")?.document(user.uid)?.get()
-                                                ?.addOnSuccessListener { document ->
-                                                    loading = false
-                                                    if (document != null) {
-                                                        val role = document.getString("role")
-                                                        val destination = when (role) {
-                                                            "HUSTLER" -> HustlerDashboardActivity::class.java
-                                                            "CUSTOMER" -> CustomerDashboardActivity::class.java
-                                                            else -> MainActivity::class.java
+                                        // --- NEW: Admin check logic ---
+                                        if (email in adminEmails) {
+                                            loading = false
+                                            Toast.makeText(context, "Admin login successful!", Toast.LENGTH_SHORT).show()
+                                            // You need to create AdminDashboardActivity
+                                            // val intent = Intent(context, AdminDashboardActivity::class.java)
+                                            // context.startActivity(intent)
+                                            // (context as? ComponentActivity)?.finish()
+                                        } else {
+                                            // Regular user role check
+                                            val user = auth.currentUser
+                                            if (user != null) {
+                                                firestore?.collection("users")?.document(user.uid)?.get()
+                                                    ?.addOnSuccessListener { document ->
+                                                        loading = false
+                                                        if (document != null && document.exists()) {
+                                                            val role = document.getString("role")
+                                                            val destination = when (role) {
+                                                                "HUSTLER" -> HustlerDashboardActivity::class.java
+                                                                "CUSTOMER" -> CustomerDashboardActivity::class.java
+                                                                else -> MainActivity::class.java // Fallback
+                                                            }
+                                                            Toast.makeText(context, "Login successful!", Toast.LENGTH_SHORT).show()
+                                                            context.startActivity(Intent(context, destination))
+                                                            (context as? ComponentActivity)?.finish()
+                                                        } else {
+                                                            Toast.makeText(context, "Error: User data not found", Toast.LENGTH_SHORT).show()
                                                         }
-                                                        Toast.makeText(context, "Login successful!", Toast.LENGTH_SHORT).show()
-                                                        context.startActivity(Intent(context, destination))
-                                                        (context as? ComponentActivity)?.finish()
-                                                    } else {
-                                                        Toast.makeText(context, "Error: User data not found", Toast.LENGTH_SHORT).show()
                                                     }
-                                                }
-                                                ?.addOnFailureListener { e ->
-                                                    loading = false
-                                                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                                                }
+                                                    ?.addOnFailureListener { e ->
+                                                        loading = false
+                                                        Toast.makeText(context, "Firestore Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                                                    }
+                                            }
                                         }
                                     } else {
                                         loading = false
-                                        Toast.makeText(context, "Error: ${task.exception?.message}", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Authentication failed: ${task.exception?.message}", Toast.LENGTH_SHORT).show()
                                     }
                                 }
                         } else {
@@ -155,7 +188,9 @@ fun GrindSphereLogin(isPreview: Boolean = false, onNavigateToSignup: () -> Unit)
             }
             Spacer(modifier = Modifier.height(16.dp))
             TextButton(onClick = {
-                context.startActivity(Intent(context, SignupActivity::class.java))
+                // This should use the callback for better navigation in Compose
+                onNavigateToSignup()
+                // context.startActivity(Intent(context, SignupActivity::class.java))
             }) {
                 Text("Don't have an account? Sign Up", color = Color.White)
             }
