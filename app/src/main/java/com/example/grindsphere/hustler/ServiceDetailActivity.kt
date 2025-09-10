@@ -76,11 +76,14 @@ fun ServiceDetailScreen(serviceId: String?) {
                         }
 
                     // Check if current user has favorited this service
-                    firestore.collection("users").document(auth.currentUser!!.uid).get()
-                        .addOnSuccessListener { userDoc ->
-                            val saved = userDoc.get("savedServices") as? List<String> ?: listOf()
-                            isFavorite = saved.contains(serviceId)
-                        }
+                    val currentUser = auth.currentUser
+                    if (currentUser != null) {
+                        firestore.collection("users").document(currentUser.uid).get()
+                            .addOnSuccessListener { userDoc ->
+                                val saved = userDoc.get("savedServices") as? List<String> ?: listOf()
+                                isFavorite = saved.contains(serviceId)
+                            }
+                    }
                 }
         }
     }
@@ -125,12 +128,12 @@ fun ServiceDetailScreen(serviceId: String?) {
                             .size(60.dp)
                             .clip(CircleShape)
                             .align(Alignment.BottomStart)
-                            .offset(16.dp, 30.dp)
+                            .padding(16.dp) // Changed from offset to padding for better positioning
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Service Name
             Text(
@@ -143,9 +146,10 @@ fun ServiceDetailScreen(serviceId: String?) {
             Spacer(modifier = Modifier.height(8.dp))
 
             // Categories
-            Row(modifier = Modifier
-                .padding(horizontal = 16.dp)
-                .horizontalScroll(rememberScrollState()),
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 categories.forEach { cat ->
@@ -171,21 +175,25 @@ fun ServiceDetailScreen(serviceId: String?) {
             Spacer(modifier = Modifier.height(16.dp))
 
             // Images Carousel
-            Text("Gallery", fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 16.dp))
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
-                items(images) { imgUrl ->
-                    Image(
-                        painter = rememberAsyncImagePainter(imgUrl),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(120.dp)
-                            .clip(RoundedCornerShape(8.dp)),
-                        contentScale = ContentScale.Crop
-                    )
+            if (images.isNotEmpty()) {
+                Text("Gallery", fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 16.dp, bottom = 8.dp))
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp)
+                ) {
+                    items(images) { imgUrl ->
+                        Image(
+                            painter = rememberAsyncImagePainter(imgUrl),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(120.dp)
+                                .clip(RoundedCornerShape(8.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
                 }
+                Spacer(modifier = Modifier.height(16.dp))
             }
-
-            Spacer(modifier = Modifier.height(24.dp))
 
             // Buttons Row
             Row(
@@ -210,13 +218,20 @@ fun ServiceDetailScreen(serviceId: String?) {
                         val userRef = firestore.collection("users").document(auth.currentUser!!.uid)
                         userRef.get().addOnSuccessListener { doc ->
                             val saved = doc.get("savedServices") as? MutableList<String> ?: mutableListOf()
-                            if (isFavorite) saved.remove(serviceId)
-                            else saved.add(serviceId!!)
+                            if (isFavorite) {
+                                saved.remove(serviceId)
+                            } else {
+                                if (serviceId != null) {
+                                    saved.add(serviceId)
+                                }
+                            }
                             userRef.update("savedServices", saved)
                             isFavorite = !isFavorite
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = if (isFavorite) Color.Red else Color.Gray),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isFavorite) Color(0xFFE53935) else Color(0xFF757575)
+                    ),
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(if (isFavorite) "Saved" else "Save")
