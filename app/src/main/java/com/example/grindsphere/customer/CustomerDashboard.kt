@@ -355,7 +355,7 @@ fun ServiceCard(service: Service, onClick: () -> Unit = {}) {
                         onClick = { /* Navigate to service details */ },
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text("View Details")
+                        Text(" Tap to View Details")
                     }
                 }
             }
