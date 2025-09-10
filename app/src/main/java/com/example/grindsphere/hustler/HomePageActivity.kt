@@ -13,17 +13,23 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
-import com.example.grindsphere.hustler.ServiceDetailActivity
+import com.example.grindsphere.R
 import com.google.firebase.firestore.FirebaseFirestore
 
 data class ServiceCard(
@@ -137,7 +143,6 @@ fun HomePageScreen() {
     }
 }
 
-
 @Composable
 fun BigServiceCard(service: ServiceCard) {
     val context = LocalContext.current
@@ -153,17 +158,52 @@ fun BigServiceCard(service: ServiceCard) {
         shape = RoundedCornerShape(16.dp)
     ) {
         Box {
-            Image(
-                painter = rememberAsyncImagePainter(service.bannerUrl),
-                contentDescription = service.name,
-                modifier = Modifier.fillMaxSize(),
+            if (service.bannerUrl.isNotEmpty()) {
+                Image(
+                    painter = rememberAsyncImagePainter(
+                        model = service.bannerUrl,
+                        error = painterResource(id = R.drawable.profilep)
+                    ),
+                    contentDescription = service.name,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Gray),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Image,
+                        contentDescription = "No image",
+                        tint = Color.White,
+                        modifier = Modifier.size(40.dp)
+                    )
+                }
+            }
+
+            // Gradient overlay for text readability
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f)),
+                            startY = 100f
+                        )
+                    )
             )
+
             Text(
                 text = service.name,
                 color = Color.White,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(8.dp)
+                    .padding(12.dp),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
             )
         }
     }
@@ -184,18 +224,53 @@ fun SmallServiceCard(service: ServiceCard) {
         shape = RoundedCornerShape(12.dp)
     ) {
         Box {
-            Image(
-                painter = rememberAsyncImagePainter(service.bannerUrl),
-                contentDescription = service.name,
-                modifier = Modifier.fillMaxSize(),
+            if (service.bannerUrl.isNotEmpty()) {
+                Image(
+                    painter = rememberAsyncImagePainter(
+                        model = service.bannerUrl,
+                        error = painterResource(id = R.drawable.profilep)
+                    ),
+                    contentDescription = service.name,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.LightGray),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Image,
+                        contentDescription = "No image",
+                        tint = Color.White,
+                        modifier = Modifier.size(30.dp)
+                    )
+                }
+            }
+
+            // Gradient overlay
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f)),
+                            startY = 70f
+                        )
+                    )
             )
+
             Text(
                 text = service.name,
                 color = Color.White,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(4.dp),
-                fontSize = 12.sp
+                    .padding(6.dp),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 2
             )
         }
     }

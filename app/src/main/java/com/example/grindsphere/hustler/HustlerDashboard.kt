@@ -54,10 +54,10 @@ fun HustlerDashboard() {
     var services by remember { mutableStateOf(listOf<HustlerServiceCard>()) }
     var totalViews by remember { mutableStateOf(0L) }
     var showMenu by remember { mutableStateOf(false) }
-    var selectedTab by remember { mutableStateOf(3) } // Default Home
+    var selectedTab by remember { mutableStateOf(0) } // Start with Profile (dashboard)
     var showSearchBar by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
-    var showMessagesScreen by remember { mutableStateOf(false) } // Track MessagesScreen visibility
+    var showMessagesScreen by remember { mutableStateOf(false) }
 
     // Fetch user profile
     LaunchedEffect(currentUser?.uid) {
@@ -101,7 +101,18 @@ fun HustlerDashboard() {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Dashboard", color = Color.White) },
+                title = {
+                    Text(
+                        when {
+                            showMessagesScreen -> "Messages"
+                            selectedTab == 3 -> "Home"
+                            selectedTab == 2 -> "Search"
+                            selectedTab == 1 -> "Messages"
+                            else -> "Dashboard"
+                        },
+                        color = Color.White
+                    )
+                },
                 actions = {
                     IconButton(onClick = { showMenu = true }) {
                         Icon(Icons.Default.MoreVert, contentDescription = "Menu", tint = Color.White)
@@ -131,28 +142,36 @@ fun HustlerDashboard() {
                         selectedTab = 3
                         showSearchBar = false
                         showMessagesScreen = false
-                        val intent = Intent(context, HomePageActivity::class.java)
-                        context.startActivity(intent)
-                        (context as? ComponentActivity)?.finish() // Optionally finish current activity
                     },
                     icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
                     label = { Text("Home") }
                 )
                 NavigationBarItem(
                     selected = selectedTab == 2,
-                    onClick = { selectedTab = 2; showSearchBar = true; showMessagesScreen = false },
+                    onClick = {
+                        selectedTab = 2
+                        showSearchBar = true
+                        showMessagesScreen = false
+                    },
                     icon = { Icon(Icons.Default.Search, contentDescription = "Search") },
                     label = { Text("Search") }
                 )
                 NavigationBarItem(
                     selected = selectedTab == 1,
-                    onClick = { selectedTab = 1; showMessagesScreen = true },
+                    onClick = {
+                        selectedTab = 1
+                        showMessagesScreen = true
+                    },
                     icon = { Icon(Icons.Default.MailOutline, contentDescription = "Messages") },
                     label = { Text("Messages") }
                 )
                 NavigationBarItem(
                     selected = selectedTab == 0,
-                    onClick = { selectedTab = 0; showMessagesScreen = false }, // This will show the main dashboard content
+                    onClick = {
+                        selectedTab = 0
+                        showSearchBar = false
+                        showMessagesScreen = false
+                    },
                     icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
                     label = { Text("Profile") }
                 )
@@ -165,112 +184,118 @@ fun HustlerDashboard() {
                 .background(Brush.verticalGradient(listOf(Color(0xFF0D324D), Color(0xFF7F5A83))))
                 .padding(paddingValues)
         ) {
-            if (showMessagesScreen) {
-                // MessagesScreen integration
-                MessagesScreen(
-                    onOpenChat = { customerUid, customerName ->
-                        val intent = Intent(context, ChatScreenActivity::class.java)
-                        intent.putExtra("customerUid", customerUid)
-                        intent.putExtra("customerName", customerName)
-                        context.startActivity(intent)
-                    },
-                    onStartNewChat = {
-                        val intent = Intent(context, NewChatActivity::class.java)
-                        context.startActivity(intent)
-                    }
-                )
-            } else {
-                // MAIN DASHBOARD CONTENT
-                Column(modifier = Modifier.padding(16.dp)) {
-                    // Welcome + Profile
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (profilePicUrl.isNotEmpty()) {
-                            Image(
-                                painter = painterResource(id = R.drawable.profilep),
-                                contentDescription = "Profile Picture",
-                                modifier = Modifier.size(60.dp).clip(CircleShape)
-                            )
-                        } else {
-                            Image(
-                                painter = painterResource(id = R.drawable.profilep),
-                                contentDescription = "Profile Placeholder",
-                                modifier = Modifier.size(60.dp).clip(CircleShape)
-                            )
+            when {
+                showMessagesScreen -> {
+                    MessagesScreen(
+                        onOpenChat = { customerUid, customerName ->
+                            val intent = Intent(context, ChatScreenActivity::class.java)
+                            intent.putExtra("customerUid", customerUid)
+                            intent.putExtra("customerName", customerName)
+                            context.startActivity(intent)
+                        },
+                        onStartNewChat = {
+                            val intent = Intent(context, NewChatActivity::class.java)
+                            context.startActivity(intent)
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "Welcome back, $hustlerName 👋",
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Stats
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.15f))
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text("Your Stats", color = Color.White, fontWeight = FontWeight.SemiBold)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text("Total Views: $totalViews", color = Color.White, fontSize = 16.sp)
-                            Text("Active Services: ${services.size}", color = Color.White, fontSize = 16.sp)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Text("Your Services", color = Color.White, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        items(filteredServices) { service ->
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(Color.White.copy(alpha = 0.2f))
-                                    .padding(12.dp)
-                                    .width(100.dp)
-                                    .clickable {
-                                        val intent = Intent(context, EditServiceActivity::class.java)
-                                        intent.putExtra("serviceId", service.id)
-                                        context.startActivity(intent)
-                                    }
-                            ) {
+                    )
+                }
+                selectedTab == 3 -> {
+                    // Show Home Screen
+                    HomePageScreen()
+                }
+                else -> {
+                    // Show Dashboard (Profile)
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        // Welcome + Profile
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (profilePicUrl.isNotEmpty()) {
                                 Image(
                                     painter = painterResource(id = R.drawable.profilep),
-                                    contentDescription = service.name,
-                                    modifier = Modifier.size(60.dp).clip(RoundedCornerShape(12.dp))
+                                    contentDescription = "Profile Picture",
+                                    modifier = Modifier.size(60.dp).clip(CircleShape)
                                 )
+                            } else {
+                                Image(
+                                    painter = painterResource(id = R.drawable.profilep),
+                                    contentDescription = "Profile Placeholder",
+                                    modifier = Modifier.size(60.dp).clip(CircleShape)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = "Welcome back, $hustlerName 👋",
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        // Stats
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.15f))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text("Your Stats", color = Color.White, fontWeight = FontWeight.SemiBold)
                                 Spacer(modifier = Modifier.height(8.dp))
-                                Text(service.name, color = Color.White, fontSize = 14.sp)
+                                Text("Total Views: $totalViews", color = Color.White, fontSize = 16.sp)
+                                Text("Active Services: ${services.size}", color = Color.White, fontSize = 16.sp)
                             }
                         }
 
-                        item {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(Color.White.copy(alpha = 0.2f))
-                                    .padding(12.dp)
-                                    .width(100.dp)
-                                    .clickable {
-                                        val intent = Intent(context, EditServiceActivity::class.java)
-                                        context.startActivity(intent)
-                                    }
-                            ) {
-                                Icon(Icons.Default.Add, contentDescription = "Add Service", tint = Color.White, modifier = Modifier.size(40.dp))
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text("Add", color = Color.White, fontSize = 14.sp)
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        Text("Your Services", color = Color.White, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            items(filteredServices) { service ->
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(Color.White.copy(alpha = 0.2f))
+                                        .padding(12.dp)
+                                        .width(100.dp)
+                                        .clickable {
+                                            val intent = Intent(context, EditServiceActivity::class.java)
+                                            intent.putExtra("serviceId", service.id)
+                                            context.startActivity(intent)
+                                        }
+                                ) {
+                                    Image(
+                                        painter = painterResource(id = R.drawable.profilep),
+                                        contentDescription = service.name,
+                                        modifier = Modifier.size(60.dp).clip(RoundedCornerShape(12.dp))
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(service.name, color = Color.White, fontSize = 14.sp)
+                                }
+                            }
+
+                            item {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(Color.White.copy(alpha = 0.2f))
+                                        .padding(12.dp)
+                                        .width(100.dp)
+                                        .clickable {
+                                            val intent = Intent(context, EditServiceActivity::class.java)
+                                            context.startActivity(intent)
+                                        }
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = "Add Service", tint = Color.White, modifier = Modifier.size(40.dp))
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text("Add", color = Color.White, fontSize = 14.sp)
+                                }
                             }
                         }
                     }
