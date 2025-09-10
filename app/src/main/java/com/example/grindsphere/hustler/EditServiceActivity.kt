@@ -35,6 +35,11 @@ import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.util.*
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarOutline
+import androidx.compose.ui.text.style.TextAlign
 
 class EditServiceActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -376,7 +381,7 @@ fun EditServiceScreen(serviceId: String?) {
                                     "categories" to selectedCategories,
                                     "ownerUid" to auth.currentUser!!.uid,
                                     "bookings" to existingBookings,
-                                    "views" to existingViews
+                                    "views" to existingViews,
                                 ) as MutableMap<String, Any?>
 
                                 // 4) Write to Firestore
