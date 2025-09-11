@@ -18,12 +18,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -35,11 +36,6 @@ import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.util.*
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.StarOutline
-import androidx.compose.ui.text.style.TextAlign
 
 class EditServiceActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -66,10 +62,13 @@ fun EditServiceScreen(serviceId: String?) {
     var location by remember { mutableStateOf("") }
 
     // Images state
-    var existingImageUrls by remember { mutableStateOf(listOf<String>()) } // stored urls
-    var imageUris by remember { mutableStateOf(listOf<Uri>()) } // newly picked URIs
+    var existingImageUrls by remember { mutableStateOf(listOf<String>()) }
+    var imageUris by remember { mutableStateOf(listOf<Uri>()) }
     var existingProfilePicUrl by remember { mutableStateOf("") }
     var selectedProfilePicUri by remember { mutableStateOf<Uri?>(null) }
+
+    // Delete state
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     // categories
     val categoriesList = listOf(
@@ -89,6 +88,29 @@ fun EditServiceScreen(serviceId: String?) {
         existingImageUrls + imageUris.map { it.toString() }
     }
 
+    // Function to delete service
+    fun deleteService() {
+        if (serviceId != null) {
+            coroutineScope.launch {
+                try {
+                    loading = true
+                    firestore.collection("services").document(serviceId).delete().await()
+                    Toast.makeText(context, "Service deleted successfully", Toast.LENGTH_SHORT).show()
+
+                    // Navigate back to dashboard
+                    val intent = Intent(context, HustlerDashboardActivity::class.java)
+                    context.startActivity(intent)
+                    if (context is ComponentActivity) (context as ComponentActivity).finish()
+
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Failed to delete service: ${e.message}", Toast.LENGTH_SHORT).show()
+                } finally {
+                    loading = false
+                }
+            }
+        }
+    }
+
     // --- Load existing service if editing ---
     LaunchedEffect(serviceId) {
         if (!serviceId.isNullOrEmpty()) {
@@ -96,9 +118,9 @@ fun EditServiceScreen(serviceId: String?) {
             try {
                 val docSnap = firestore.collection("services").document(serviceId).get().await()
                 if (docSnap.exists()) {
-                    serviceName = docSnap.getString("name") ?: ""
-                    description = docSnap.getString("description") ?: ""
-                    location = docSnap.getString("location") ?: ""
+                    serviceName = docSnap.getString("name") ?: "" // FIXED: docSnap instead of doc
+                    description = docSnap.getString("description") ?: "" // FIXED: docSnap instead of doc
+                    location = docSnap.getString("location") ?: "" // FIXED: docSnap instead of doc
                     existingImageUrls = (docSnap.get("images") as? List<*>)?.mapNotNull { it as? String } ?: listOf()
                     existingProfilePicUrl = docSnap.getString("profilePicUrl") ?: ""
                     selectedCategories = (docSnap.get("categories") as? List<*>)?.mapNotNull { it as? String } ?: listOf()
@@ -132,7 +154,6 @@ fun EditServiceScreen(serviceId: String?) {
     }
 
     suspend fun uploadProfilePicIfNeeded(): String {
-        // If user picked a new profile pic, upload it; otherwise keep existing URL (could be empty)
         return if (selectedProfilePicUri != null) {
             val path = "profilePics/${auth.currentUser!!.uid}/${System.currentTimeMillis()}_${UUID.randomUUID()}.jpg"
             uploadFileAndGetUrl(path, selectedProfilePicUri!!)
@@ -164,12 +185,25 @@ fun EditServiceScreen(serviceId: String?) {
                 title = { Text(if (serviceId != null) "Edit Service" else "Add Service") },
                 navigationIcon = {
                     IconButton(onClick = {
-                        // go back to Hustler Dashboard
                         val intent = Intent(context, HustlerDashboardActivity::class.java)
                         context.startActivity(intent)
-                        if (context is EditServiceActivity) context.finish()
+                        if (context is ComponentActivity) (context as ComponentActivity).finish()
                     }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    if (!serviceId.isNullOrEmpty()) {
+                        IconButton(
+                            onClick = { showDeleteDialog = true },
+                            enabled = !loading
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete Service",
+                                tint = Color.Red
+                            )
+                        }
                     }
                 }
             )
@@ -194,7 +228,6 @@ fun EditServiceScreen(serviceId: String?) {
                         .clip(RoundedCornerShape(12.dp))
                         .background(MaterialTheme.colorScheme.primary)
                         .clickable {
-                            // tapping banner can open image picker to add images (the first image becomes banner)
                             pickImagesLauncher.launch("image/*")
                         },
                     contentAlignment = Alignment.Center
@@ -287,11 +320,9 @@ fun EditServiceScreen(serviceId: String?) {
                             .size(100.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .clickable {
-                                // If it's an existing URL, remove from existingImageUrls
                                 if (existingImageUrls.contains(img)) {
                                     existingImageUrls = existingImageUrls - img
                                 } else {
-                                    // else it represents a new picked URI string -> remove from imageUris
                                     val toRemove = imageUris.find { it.toString() == img }
                                     toRemove?.let { imageUris = imageUris - it }
                                 }
@@ -362,31 +393,25 @@ fun EditServiceScreen(serviceId: String?) {
                             }
                             loading = true
                             try {
-                                // 1) Upload profile pic if replaced
                                 val profileUrl = uploadProfilePicIfNeeded()
-
-                                // 2) Upload new service images and combine with existing
                                 val newUploaded = uploadImagesAndGetUrls(imageUris)
                                 val finalImageUrls = existingImageUrls + newUploaded
                                 val bannerUrl = finalImageUrls.firstOrNull() ?: ""
 
-                                // 3) Prepare data
                                 val data = hashMapOf(
                                     "name" to serviceName,
                                     "description" to description,
                                     "location" to location,
-                                    "bannerUrl" to bannerUrl,
+                                    "banner" to bannerUrl,
                                     "profilePicUrl" to profileUrl,
                                     "images" to finalImageUrls,
                                     "categories" to selectedCategories,
                                     "ownerUid" to auth.currentUser!!.uid,
                                     "bookings" to existingBookings,
-                                    "views" to existingViews,
+                                    "views" to existingViews
                                 ) as MutableMap<String, Any?>
 
-                                // 4) Write to Firestore
                                 if (!serviceId.isNullOrEmpty()) {
-                                    // Update existing doc (set will overwrite - it's fine since we included all fields)
                                     firestore.collection("services").document(serviceId).set(data).await()
                                     Toast.makeText(context, "Service updated", Toast.LENGTH_SHORT).show()
                                 } else {
@@ -394,17 +419,14 @@ fun EditServiceScreen(serviceId: String?) {
                                     Toast.makeText(context, "Service added", Toast.LENGTH_SHORT).show()
                                 }
 
-                                // clear new picks
                                 imageUris = listOf()
                                 selectedProfilePicUri = null
-                                // if editing - update local existingImageUrls to reflect final state
                                 existingImageUrls = finalImageUrls
                                 existingProfilePicUrl = profileUrl
 
-                                // navigate back to Hustler dashboard
                                 val intent = Intent(context, HustlerDashboardActivity::class.java)
                                 context.startActivity(intent)
-                                if (context is EditServiceActivity) context.finish()
+                                if (context is ComponentActivity) (context as ComponentActivity).finish()
 
                             } catch (e: Exception) {
                                 Toast.makeText(context, "Failed to save: ${e.message}", Toast.LENGTH_LONG).show()
@@ -423,6 +445,40 @@ fun EditServiceScreen(serviceId: String?) {
                     Text(if (serviceId != null) "Save Changes" else "Add Service")
                 }
             }
+        }
+
+        // Delete Confirmation Dialog
+        if (showDeleteDialog) {
+            AlertDialog(
+                onDismissRequest = {
+                    showDeleteDialog = false
+                },
+                title = {
+                    Text("Delete Service")
+                },
+                text = {
+                    Text("Are you sure you want to delete '$serviceName'? This action cannot be undone.")
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            deleteService()
+                            showDeleteDialog = false
+                        }
+                    ) {
+                        Text("Delete", color = Color.Red)
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showDeleteDialog = false
+                        }
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
     }
 }
