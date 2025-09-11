@@ -1,10 +1,12 @@
 package com.example.grindsphere.hustler
 
+import android.Manifest
 import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.compose.animation.*
-import androidx.compose.animation.core.tween
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -20,26 +22,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.rememberAsyncImagePainter
 import com.example.grindsphere.LoginActivity
 import com.example.grindsphere.R
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-
-data class HustlerServiceCard(
-    val id: String,
-    val name: String,
-    val imageUrl: String,
-    val views: Long = 0
-)
+import com.google.firebase.storage.FirebaseStorage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,17 +42,53 @@ fun HustlerDashboard() {
     val context = LocalContext.current
     val auth = FirebaseAuth.getInstance()
     val firestore = FirebaseFirestore.getInstance()
+    val storage = FirebaseStorage.getInstance()
     val currentUser = auth.currentUser
 
     var hustlerName by remember { mutableStateOf("Hustler") }
     var profilePicUrl by remember { mutableStateOf("") }
-    var services by remember { mutableStateOf(listOf<HustlerServiceCard>()) }
-    var totalViews by remember { mutableStateOf(0L) }
+    var services by remember { mutableStateOf(listOf<ServiceCard>()) }
+    var totalBookings by remember { mutableStateOf(0L) }
     var showMenu by remember { mutableStateOf(false) }
-    var selectedTab by remember { mutableStateOf(0) } // Start with Profile (dashboard)
-    var showSearchBar by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
+    var selectedTab by remember { mutableStateOf(3) } // Start with Home
     var showMessagesScreen by remember { mutableStateOf(false) }
+    var showSearchBar by remember { mutableStateOf(false) } // Control search bar visibility
+
+    // Permission launcher for storage access
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (!isGranted) {
+            Toast.makeText(context, "Storage permission denied", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Image picker launcher for profile picture
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            val userId = currentUser?.uid ?: return@let
+            val storageRef = storage.reference.child("profile_pics/$userId.jpg")
+            storageRef.putFile(uri)
+                .addOnSuccessListener {
+                    storageRef.downloadUrl.addOnSuccessListener { downloadUrl ->
+                        firestore.collection("users").document(userId)
+                            .update("profilePicUrl", downloadUrl.toString())
+                            .addOnSuccessListener {
+                                profilePicUrl = downloadUrl.toString()
+                                Toast.makeText(context, "Profile picture updated", Toast.LENGTH_SHORT).show()
+                            }
+                            .addOnFailureListener { e ->
+                                Toast.makeText(context, "Failed to update profile: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                    }
+                }
+                .addOnFailureListener { e ->
+                    Toast.makeText(context, "Upload failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+        }
+    }
 
     // Fetch user profile
     LaunchedEffect(currentUser?.uid) {
@@ -81,21 +112,18 @@ fun HustlerDashboard() {
                         return@addSnapshotListener
                     }
                     val list = snapshot?.documents?.map { doc ->
-                        HustlerServiceCard(
+                        ServiceCard(
                             id = doc.id,
                             name = doc.getString("name") ?: "Service",
-                            imageUrl = doc.getString("imageUrl") ?: "",
-                            views = doc.getLong("views") ?: 0L
+                            bannerUrl = doc.getString("banner") ?: "",
+                            bookings = doc.getLong("bookings") ?: 0L,
+                            categories = doc.get("categories") as? List<String> ?: listOf()
                         )
                     } ?: listOf()
                     services = list
-                    totalViews = list.sumOf { it.views }
+                    totalBookings = list.sumOf { it.bookings }
                 }
         }
-    }
-
-    val filteredServices = if (searchQuery.isBlank()) services else services.filter {
-        it.name.contains(searchQuery, ignoreCase = true)
     }
 
     Scaffold(
@@ -140,8 +168,8 @@ fun HustlerDashboard() {
                     selected = selectedTab == 3,
                     onClick = {
                         selectedTab = 3
-                        showSearchBar = false
                         showMessagesScreen = false
+                        showSearchBar = false // Hide search bar on Home
                     },
                     icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
                     label = { Text("Home") }
@@ -150,8 +178,8 @@ fun HustlerDashboard() {
                     selected = selectedTab == 2,
                     onClick = {
                         selectedTab = 2
-                        showSearchBar = true
                         showMessagesScreen = false
+                        showSearchBar = true // Show search bar on Search
                     },
                     icon = { Icon(Icons.Default.Search, contentDescription = "Search") },
                     label = { Text("Search") }
@@ -161,6 +189,7 @@ fun HustlerDashboard() {
                     onClick = {
                         selectedTab = 1
                         showMessagesScreen = true
+                        showSearchBar = false // Hide search bar on Messages
                     },
                     icon = { Icon(Icons.Default.MailOutline, contentDescription = "Messages") },
                     label = { Text("Messages") }
@@ -169,8 +198,8 @@ fun HustlerDashboard() {
                     selected = selectedTab == 0,
                     onClick = {
                         selectedTab = 0
-                        showSearchBar = false
                         showMessagesScreen = false
+                        showSearchBar = false // Hide search bar on Profile
                     },
                     icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
                     label = { Text("Profile") }
@@ -199,27 +228,42 @@ fun HustlerDashboard() {
                         }
                     )
                 }
-                selectedTab == 3 -> {
-                    // Show Home Screen
-                    HomePageScreen()
+                selectedTab == 2 || selectedTab == 3 -> {
+                    HomePageScreen(showSearchBar = showSearchBar)
                 }
                 else -> {
-                    // Show Dashboard (Profile)
                     Column(modifier = Modifier.padding(16.dp)) {
-                        // Welcome + Profile
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (profilePicUrl.isNotEmpty()) {
-                                Image(
-                                    painter = painterResource(id = R.drawable.profilep),
-                                    contentDescription = "Profile Picture",
-                                    modifier = Modifier.size(60.dp).clip(CircleShape)
-                                )
-                            } else {
-                                Image(
-                                    painter = painterResource(id = R.drawable.profilep),
-                                    contentDescription = "Profile Placeholder",
-                                    modifier = Modifier.size(60.dp).clip(CircleShape)
-                                )
+                            Box(
+                                modifier = Modifier
+                                    .size(60.dp)
+                                    .clip(CircleShape)
+                                    .clickable {
+                                        permissionLauncher.launch(
+                                            if (android.os.Build.VERSION.SDK_INT >= 33)
+                                                Manifest.permission.READ_MEDIA_IMAGES
+                                            else
+                                                Manifest.permission.READ_EXTERNAL_STORAGE
+                                        )
+                                        imagePickerLauncher.launch("image/*")
+                                    }
+                            ) {
+                                if (profilePicUrl.isNotEmpty()) {
+                                    Image(
+                                        painter = rememberAsyncImagePainter(
+                                            model = profilePicUrl,
+                                            error = painterResource(id = R.drawable.profilep)
+                                        ),
+                                        contentDescription = "Profile Picture",
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                } else {
+                                    Image(
+                                        painter = painterResource(id = R.drawable.profilep),
+                                        contentDescription = "Profile Placeholder",
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
                             }
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
@@ -232,7 +276,6 @@ fun HustlerDashboard() {
 
                         Spacer(modifier = Modifier.height(24.dp))
 
-                        // Stats
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(16.dp),
@@ -244,7 +287,7 @@ fun HustlerDashboard() {
                             ) {
                                 Text("Your Stats", color = Color.White, fontWeight = FontWeight.SemiBold)
                                 Spacer(modifier = Modifier.height(8.dp))
-                                Text("Total Views: $totalViews", color = Color.White, fontSize = 16.sp)
+                                Text("Total Bookings: $totalBookings", color = Color.White, fontSize = 16.sp)
                                 Text("Active Services: ${services.size}", color = Color.White, fontSize = 16.sp)
                             }
                         }
@@ -255,7 +298,7 @@ fun HustlerDashboard() {
                         Spacer(modifier = Modifier.height(12.dp))
 
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            items(filteredServices) { service ->
+                            items(services) { service ->
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     modifier = Modifier
@@ -270,7 +313,10 @@ fun HustlerDashboard() {
                                         }
                                 ) {
                                     Image(
-                                        painter = painterResource(id = R.drawable.profilep),
+                                        painter = rememberAsyncImagePainter(
+                                            model = service.bannerUrl,
+                                            error = painterResource(id = R.drawable.profilep)
+                                        ),
                                         contentDescription = service.name,
                                         modifier = Modifier.size(60.dp).clip(RoundedCornerShape(12.dp))
                                     )
@@ -301,47 +347,6 @@ fun HustlerDashboard() {
                     }
                 }
             }
-
-            // MODERN SEARCH OVERLAY
-            AnimatedVisibility(
-                visible = showSearchBar,
-                enter = slideInVertically(
-                    initialOffsetY = { -200 },
-                    animationSpec = tween(durationMillis = 400)
-                ) + fadeIn(animationSpec = tween(400)),
-                exit = slideOutVertically(
-                    targetOffsetY = { -200 },
-                    animationSpec = tween(durationMillis = 400)
-                ) + fadeOut(animationSpec = tween(400))
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.3f))
-                        .clickable { showSearchBar = false } // dismiss when tapping outside
-                ) {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        label = { Text("Search Services") },
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp, vertical = 16.dp)
-                            .align(Alignment.TopCenter)
-                            .background(Color.White, RoundedCornerShape(24.dp))
-                            .shadow(8.dp, RoundedCornerShape(24.dp)),
-                        textStyle = LocalTextStyle.current.copy(fontSize = 16.sp)
-                    )
-                }
-            }
         }
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Preview(showBackground = true)
-@Composable
-fun HustlerDashboardPreview() {
-    HustlerDashboard()
 }
