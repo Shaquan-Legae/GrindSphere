@@ -66,6 +66,7 @@ dependencies {
     implementation("com.google.firebase:firebase-firestore-ktx")
     implementation(libs.androidx.navigation.runtime.ktx)
     implementation(libs.androidx.compose.animation.core.lint)
+    implementation(libs.androidx.ui.text)
 
     // Testing
     testImplementation(libs.junit)

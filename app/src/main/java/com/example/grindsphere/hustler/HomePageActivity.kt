@@ -4,8 +4,6 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -13,38 +11,33 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImagePainter
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.rememberAsyncImagePainter
-import com.example.grindsphere.R
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 
 data class ServiceCard(
     val id: String,
     val name: String,
-    val bannerUrl: String = "",
+    val bannerUrl: String,
     val bookings: Long = 0,
     val categories: List<String> = listOf()
 )
@@ -54,326 +47,359 @@ class HomePageActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            HomePageScreen(showSearchBar = false) // Default to no search bar
+            HomePageScreen()
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomePageScreen(showSearchBar: Boolean = false) {
+fun HomePageScreen(
+    onNavigateToSearch: () -> Unit={},
+    viewModel: SharedViewModel = viewModel()
+) {
     val context = LocalContext.current
     val firestore = FirebaseFirestore.getInstance()
+    var featuredServices by remember { mutableStateOf(listOf<HustlerServiceCard>()) }
+    var popularServices by remember { mutableStateOf(listOf<HustlerServiceCard>()) }
 
-    var allServices by remember { mutableStateOf(listOf<ServiceCard>()) }
-    var isLoading by remember { mutableStateOf(true) }
-    var searchQuery by remember { mutableStateOf("") }
-    var isSearchFocused by remember { mutableStateOf(false) }
-
-    // Animation for search bar scale
-    val searchScale by animateFloatAsState(
-        targetValue = if (isSearchFocused) 1.05f else 1f,
-        animationSpec = tween(durationMillis = 200)
-    )
-
-    // Fetch all services from Firestore with real-time updates
-    LaunchedEffect(true) {
+    // Fetch featured and popular services
+    LaunchedEffect(Unit) {
         firestore.collection("services")
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    isLoading = false
-                    return@addSnapshotListener
-                }
-                val servicesList = snapshot?.documents?.map { doc ->
-                    ServiceCard(
+            .orderBy("views", Query.Direction.DESCENDING)
+            .limit(10)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                val list = snapshot.documents.map { doc ->
+                    HustlerServiceCard(
                         id = doc.id,
                         name = doc.getString("name") ?: "Service",
                         bannerUrl = doc.getString("banner") ?: "",
-                        bookings = doc.getLong("bookings") ?: 0L,
+                        views = doc.getLong("views") ?: 0L,
                         categories = doc.get("categories") as? List<String> ?: listOf()
                     )
-                } ?: listOf()
-                allServices = servicesList
-                isLoading = false
-            }
-    }
-
-    // Filter services based on search query
-    val filteredServices = if (searchQuery.isBlank()) {
-        allServices
-    } else {
-        allServices.filter { service ->
-            service.name.contains(searchQuery, ignoreCase = true) ||
-                    service.categories.any { it.contains(searchQuery, ignoreCase = true) }
-        }
-    }
-
-    Scaffold(
-        bottomBar = {
-            if (showSearchBar) {
-                BottomAppBar(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentPadding = PaddingValues(horizontal = 16.dp)
-                ) {
-                    TextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        placeholder = { Text("Search services...") },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.Search,
-                                contentDescription = "Search",
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
-                        },
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .scale(searchScale)
-                            .onFocusChanged { focusState -> isSearchFocused = focusState.isFocused }
-                            .clip(RoundedCornerShape(24.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .shadow(4.dp, RoundedCornerShape(24.dp)),
-                        colors = TextFieldDefaults.colors(
-                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            cursorColor = MaterialTheme.colorScheme.primary
-                        )
-                    )
                 }
+                popularServices = list
+
+                // For featured services, take the top 3 most viewed
+                featuredServices = list.take(3)
             }
-        }
-    ) { paddingValues ->
-        Column(
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color(0xFF0D324D),
+                        Color(0xFF7F5A83),
+                        Color(0xFFA188A6)
+                    )
+                )
+            )
+            .verticalScroll(rememberScrollState())
+    ) {
+        // Header with welcome message
+        Row(
             modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .background(Color(0xFFF5F5F5))
-                .padding(paddingValues)
-                .padding(vertical = 16.dp)
+                .fillMaxWidth()
+                .padding(24.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            if (isLoading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-                return@Column
+            Column {
+                Text(
+                    "Discover Services",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                Text(
+                    "Find amazing services near you",
+                    fontSize = 16.sp,
+                    color = Color.White.copy(alpha = 0.8f)
+                )
             }
 
-            if (filteredServices.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = if (searchQuery.isBlank()) "No services available" else "No matching services",
-                        fontSize = 18.sp
-                    )
-                }
-                return@Column
-            }
+            // Search icon
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = "Search",
+                tint = Color.White,
+                modifier = Modifier
+                    .size(32.dp)
+                    .clickable { onNavigateToSearch() }
+            )
+        }
 
+        // Featured Services Section
+        if (featuredServices.isNotEmpty()) {
             Text(
-                text = "Top 10 Services",
-                fontSize = 20.sp,
+                "Featured Services",
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp)
+                color = Color.White,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
             )
 
             LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(horizontal = 24.dp),
+                modifier = Modifier.padding(bottom = 24.dp)
             ) {
-                val top10 = filteredServices.sortedByDescending { it.bookings }.take(10)
-                items(top10) { service ->
-                    BigServiceCard(service)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Text(
-                text = "Recommended for You",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp)
-            )
-
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                val recommended = filteredServices.shuffled().take(10)
-                items(recommended) { service ->
-                    SmallServiceCard(service)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Category-based carousels
-            val categories = filteredServices.flatMap { it.categories }.distinct()
-            categories.forEach { category ->
-                val catServices = filteredServices.filter { it.categories.contains(category) }
-                if (catServices.isNotEmpty()) {
-                    Text(
-                        text = category,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
-
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                items(featuredServices) { service ->
+                    Card(
+                        modifier = Modifier
+                            .width(280.dp)
+                            .height(200.dp)
+                            .clickable {
+                                val intent = Intent(context, com.example.grindsphere.hustler.ServiceDetailActivity::class.java)
+                                intent.putExtra("serviceId", service.id)
+                                context.startActivity(intent)
+                            },
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White)
                     ) {
-                        items(catServices) { service ->
-                            SmallServiceCard(service)
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            if (service.bannerUrl.isNotEmpty()) {
+                                Image(
+                                    painter = rememberAsyncImagePainter(service.bannerUrl),
+                                    contentDescription = service.name,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(
+                                            Brush.verticalGradient(
+                                                listOf(
+                                                    Color(0xFF7F5A83),
+                                                    Color(0xFF0D324D)
+                                                )
+                                            )
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.Storefront,
+                                        contentDescription = "Service",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(40.dp)
+                                    )
+                                }
+                            }
+
+                            // Gradient overlay for text readability
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        Brush.verticalGradient(
+                                            colors = listOf(
+                                                Color.Transparent,
+                                                Color.Black.copy(alpha = 0.7f)
+                                            ),
+                                            startY = 100f
+                                        )
+                                    )
+                            )
+
+                            // Service info at bottom
+                            Column(
+                                modifier = Modifier
+                                    .align(Alignment.BottomStart)
+                                    .padding(16.dp)
+                            ) {
+                                Text(
+                                    service.name,
+                                    color = Color.White,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    "${service.views} views",
+                                    color = Color.White.copy(alpha = 0.8f),
+                                    fontSize = 12.sp
+                                )
+                            }
                         }
                     }
-                    Spacer(modifier = Modifier.height(16.dp))
                 }
             }
         }
-    }
-}
 
-@Composable
-fun BigServiceCard(service: ServiceCard) {
-    val context = LocalContext.current
-    val imagePainter = rememberAsyncImagePainter(
-        model = service.bannerUrl,
-        error = painterResource(id = R.drawable.profilep)
-    )
-    val imageState = imagePainter.state
+        // Popular Categories Section
+        Text(
+            "Browse Categories",
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
+        )
 
-    Card(
-        modifier = Modifier
-            .width(220.dp)
-            .height(140.dp)
-            .clickable {
-                val intent = Intent(context, ServiceDetailActivity::class.java).apply {
-                    putExtra("serviceId", service.id)
-                }
-                context.startActivity(intent)
-            },
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Box {
-            if (imageState is AsyncImagePainter.State.Success || service.bannerUrl.isNotEmpty()) {
-                Image(
-                    painter = imagePainter,
-                    contentDescription = service.name,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Box(
+        val popularCategories = listOf("Tutoring", "Beauty", "Food", "Fitness", "Design", "Tech")
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = 24.dp),
+            modifier = Modifier.padding(bottom = 24.dp)
+        ) {
+            items(popularCategories) { category ->
+                Card(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Gray),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Image,
-                        contentDescription = "No image",
-                        tint = Color.White,
-                        modifier = Modifier.size(40.dp)
+                        .width(120.dp)
+                        .height(80.dp)
+                        .clickable {
+                            viewModel.setSelectedCategory(category)
+                            onNavigateToSearch()
+                            // Navigate to category search
+                        },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color.White.copy(alpha = 0.2f)
                     )
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(
+                                        Color(0xFF7F5A83).copy(alpha = 0.6f),
+                                        Color(0xFF0D324D).copy(alpha = 0.6f)
+                                    )
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            category,
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f)),
-                            startY = 100f
-                        )
-                    )
-            )
-
-            Text(
-                text = service.name,
-                color = Color.White,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(12.dp),
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
-            )
         }
-    }
-}
 
-@Composable
-fun SmallServiceCard(service: ServiceCard) {
-    val context = LocalContext.current
-    val imagePainter = rememberAsyncImagePainter(
-        model = service.bannerUrl,
-        error = painterResource(id = R.drawable.profilep)
-    )
-    val imageState = imagePainter.state
+        // Popular Services Section
+        Text(
+            "Most Popular",
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
+        )
 
-    Card(
-        modifier = Modifier
-            .width(140.dp)
-            .height(100.dp)
-            .clickable {
-                val intent = Intent(context, ServiceDetailActivity::class.java).apply {
-                    putExtra("serviceId", service.id)
-                }
-                context.startActivity(intent)
-            },
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Box {
-            if (imageState is AsyncImagePainter.State.Success || service.bannerUrl.isNotEmpty()) {
-                Image(
-                    painter = imagePainter,
-                    contentDescription = service.name,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.LightGray),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Image,
-                        contentDescription = "No image",
-                        tint = Color.White,
-                        modifier = Modifier.size(30.dp)
-                    )
+        if (popularServices.isNotEmpty()) {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(horizontal = 24.dp),
+                modifier = Modifier.padding(bottom = 24.dp)
+            ) {
+                items(popularServices) { service ->
+                    Card(
+                        modifier = Modifier
+                            .width(160.dp)
+                            .clickable {
+                                val intent = Intent(context, ServiceDetailActivity::class.java)
+                                intent.putExtra("serviceId", service.id)
+                                context.startActivity(intent)
+                            },
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.1f))
+                    ) {
+                        Column {
+                            if (service.bannerUrl.isNotEmpty()) {
+                                Image(
+                                    painter = rememberAsyncImagePainter(service.bannerUrl),
+                                    contentDescription = service.name,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .height(120.dp)
+                                        .fillMaxWidth()
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .height(120.dp)
+                                        .fillMaxWidth()
+                                        .background(
+                                            Brush.verticalGradient(
+                                                listOf(
+                                                    Color(0xFF7F5A83),
+                                                    Color(0xFF0D324D)
+                                                )
+                                            )
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.Storefront,
+                                        contentDescription = "Service",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(32.dp)
+                                    )
+                                }
+                            }
+
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    service.name,
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    "${service.views} views",
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
+                    }
                 }
             }
-
+        } else {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f)),
-                            startY = 70f
-                        )
-                    )
-            )
+                    .fillMaxWidth()
+                    .padding(32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "No services available yet",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 16.sp
+                )
+            }
+        }
 
-            Text(
-                text = service.name,
-                color = Color.White,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(6.dp),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 2
+        // Call to action button
+        Button(
+            onClick = {
+                onNavigateToSearch() // Navigate to search
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 16.dp)
+                .height(50.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFFFFD700),
+                contentColor = Color.Black
             )
+        ) {
+            Text("Explore All Services", fontWeight = FontWeight.Bold)
         }
     }
 }

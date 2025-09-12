@@ -3,6 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 
     <application
         android:name="MyApplication"
@@ -14,6 +15,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.GrindSphere">
+
 
         <!-- LoginActivity is declared but no longer the launcher -->
         <activity
@@ -80,6 +82,8 @@
         <activity
             android:name=".hustler.ServiceDetailActivity"
             android:exported="false" />
+
+
 
 
 
