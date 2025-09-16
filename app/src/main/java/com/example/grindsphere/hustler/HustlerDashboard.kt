@@ -1,5 +1,12 @@
 package com.example.grindsphere.hustler
 
+import android.util.Log
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import androidx.compose.material3.Divider
+import com.google.firebase.firestore.Query
+import android.R.attr.rating
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -12,10 +19,13 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -32,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -51,6 +62,11 @@ data class HustlerServiceCard(
     val views: Long = 0,
     val categories: List<String> = listOf()
 )
+
+// Add this enum to track screens
+enum class Screen {
+    DASHBOARD, MESSAGES, SEARCH, HOME, FAVORITES
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,20 +89,24 @@ fun HustlerDashboard(
     var totalViews by remember { mutableStateOf(0L) }
     var showMenu by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableIntStateOf(0) }
-    var showSearchBar by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
-    var showMessagesScreen by remember { mutableStateOf(false) }
-    var showFavorites by remember { mutableStateOf(false) }
     var selectedCategory by remember { mutableStateOf("") }
+
+    // Use a single source of truth for current screen
+    var currentScreen by remember { mutableStateOf(Screen.DASHBOARD) }
 
     LaunchedEffect(viewModelSelectedCategory) {
         selectedCategory = viewModelSelectedCategory
     }
 
-    LaunchedEffect(showSearchBar) {
-        if (!showSearchBar) {
-            viewModel.clearSelectedCategory()
-            selectedCategory = ""
+    LaunchedEffect(selectedTab) {
+        // Update current screen based on selected tab
+        currentScreen = when (selectedTab) {
+            0 -> Screen.DASHBOARD
+            1 -> Screen.MESSAGES
+            2 -> Screen.SEARCH
+            3 -> Screen.HOME
+            else -> Screen.DASHBOARD
         }
     }
 
@@ -226,21 +246,24 @@ fun HustlerDashboard(
             TopAppBar(
                 title = {
                     Text(
-                        when {
-                            showMessagesScreen -> "Messages"
-                            selectedTab == 3 -> "Home"
-                            selectedTab == 2 -> "Search"
-                            selectedTab == 1 -> "Messages"
-                            showFavorites -> "Favorites"
-                            else -> "Dashboard"
+                        when (currentScreen) {
+                            Screen.MESSAGES -> "Messages"
+                            Screen.HOME -> "Home"
+                            Screen.SEARCH -> "Search"
+                            Screen.FAVORITES -> "Favorites"
+                            Screen.DASHBOARD -> "Dashboard"
                         },
                         color = Color.White
                     )
                 },
                 actions = {
-                    if (!showFavorites && favoriteServices.isNotEmpty()) {
+                    // Only show favorites icon on Dashboard screen
+                    if (currentScreen == Screen.DASHBOARD && favoriteServices.isNotEmpty()) {
                         IconButton(
-                            onClick = { showFavorites = true },
+                            onClick = {
+                                currentScreen = Screen.FAVORITES
+                                selectedTab = -1 // Clear tab selection for favorites
+                            },
                             modifier = Modifier.padding(end = 8.dp)
                         ) {
                             Icon(Icons.Default.Star, contentDescription = "Favorites", tint = Color(0xFFFFD700))
@@ -265,50 +288,46 @@ fun HustlerDashboard(
             )
         },
         bottomBar = {
-            NavigationBar(containerColor = Color.White) {
-                NavigationBarItem(
-                    selected = selectedTab == 3,
-                    onClick = {
-                        selectedTab = 3
-                        showSearchBar = false
-                        showMessagesScreen = false
-                        showFavorites = false
-                    },
-                    icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
-                    label = { Text("Home") }
-                )
-                NavigationBarItem(
-                    selected = selectedTab == 2,
-                    onClick = {
-                        selectedTab = 2
-                        showSearchBar = true
-                        showMessagesScreen = false
-                        showFavorites = false
-                    },
-                    icon = { Icon(Icons.Default.Search, contentDescription = "Search") },
-                    label = { Text("Search") }
-                )
-                NavigationBarItem(
-                    selected = selectedTab == 1,
-                    onClick = {
-                        selectedTab = 1
-                        showMessagesScreen = true
-                        showFavorites = false
-                    },
-                    icon = { Icon(Icons.Default.MailOutline, contentDescription = "Messages") },
-                    label = { Text("Messages") }
-                )
-                NavigationBarItem(
-                    selected = selectedTab == 0,
-                    onClick = {
-                        selectedTab = 0
-                        showSearchBar = false
-                        showMessagesScreen = false
-                        showFavorites = false
-                    },
-                    icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
-                    label = { Text("Profile") }
-                )
+            // Only show bottom nav when not in favorites
+            if (currentScreen != Screen.FAVORITES) {
+                NavigationBar(containerColor = Color.White) {
+                    NavigationBarItem(
+                        selected = currentScreen == Screen.HOME,
+                        onClick = {
+                            selectedTab = 3
+                            currentScreen = Screen.HOME
+                        },
+                        icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
+                        label = { Text("Home") }
+                    )
+                    NavigationBarItem(
+                        selected = currentScreen == Screen.SEARCH,
+                        onClick = {
+                            selectedTab = 2
+                            currentScreen = Screen.SEARCH
+                        },
+                        icon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                        label = { Text("Search") }
+                    )
+                    NavigationBarItem(
+                        selected = currentScreen == Screen.MESSAGES,
+                        onClick = {
+                            selectedTab = 1
+                            currentScreen = Screen.MESSAGES
+                        },
+                        icon = { Icon(Icons.Default.MailOutline, contentDescription = "Messages") },
+                        label = { Text("Messages") }
+                    )
+                    NavigationBarItem(
+                        selected = currentScreen == Screen.DASHBOARD,
+                        onClick = {
+                            selectedTab = 0
+                            currentScreen = Screen.DASHBOARD
+                        },
+                        icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
+                        label = { Text("Profile") }
+                    )
+                }
             }
         }
     ) { paddingValues ->
@@ -316,10 +335,9 @@ fun HustlerDashboard(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Brush.verticalGradient(listOf(Color(0xFF0D324D), Color(0xFF7F5A83))))
-                .padding(paddingValues)
         ) {
-            when {
-                showMessagesScreen -> {
+            when (currentScreen) {
+                Screen.MESSAGES -> {
                     MessagesScreen(
                         onOpenChat = { customerUid, customerName ->
                             val intent = Intent(context, ChatScreenActivity::class.java)
@@ -333,21 +351,25 @@ fun HustlerDashboard(
                         }
                     )
                 }
-                selectedTab == 3 -> {
+                Screen.HOME -> {
                     HomePageScreen(
                         onNavigateToSearch = {
+                            currentScreen = Screen.SEARCH
                             selectedTab = 2
-                            showSearchBar = true
                         },
                         viewModel = viewModel
                     )
                 }
-                showFavorites -> {
+                Screen.FAVORITES -> {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
-                                .clickable { showFavorites = false }
+                                .verticalScroll(rememberScrollState())
+                                .clickable {
+                                    currentScreen = Screen.DASHBOARD
+                                    selectedTab = 0
+                                }
                                 .padding(bottom = 16.dp)
                         ) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "Back to Dashboard", tint = Color.White)
@@ -362,7 +384,10 @@ fun HustlerDashboard(
                                 Text("No favorite services yet", color = Color.White.copy(alpha = 0.7f), fontSize = 16.sp)
                             }
                         } else {
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                modifier = Modifier.height(140.dp)
+                            ) {
                                 items(favoriteServices) { service ->
                                     Card(
                                         modifier = Modifier
@@ -422,300 +447,315 @@ fun HustlerDashboard(
                         }
                     }
                 }
-                else -> {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (profilePicUrl.isNotEmpty()) {
-                                Image(
-                                    painter = rememberAsyncImagePainter(ImageRequest.Builder(LocalContext.current).data(profilePicUrl).build()),
-                                    contentDescription = "Profile Picture",
-                                    modifier = Modifier
-                                        .size(60.dp)
-                                        .clip(CircleShape)
-                                        .clickable { imagePickerLauncher.launch("image/*") }
-                                )
-                            } else {
-                                Image(
-                                    painter = painterResource(id = R.drawable.noprofile),
-                                    contentDescription = "Profile Placeholder",
-                                    modifier = Modifier
-                                        .size(60.dp)
-                                        .clip(CircleShape)
-                                        .clickable { imagePickerLauncher.launch("image/*") }
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text("Welcome back, $hustlerName 👋", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Screen.SEARCH -> {
+                    SearchScreen(
+                        allServices = allServices,
+                        searchQuery = searchQuery,
+                        onSearchQueryChange = { searchQuery = it },
+                        selectedCategory = selectedCategory,
+                        onSelectedCategoryChange = { selectedCategory = it },
+                        predefinedCategories = predefinedCategories,
+                        onServiceClick = { serviceId ->
+                            val intent = Intent(context, ServiceDetailActivity::class.java)
+                            intent.putExtra("serviceId", serviceId)
+                            context.startActivity(intent)
                         }
-
-                        Spacer(modifier = Modifier.height(24.dp))
-
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.15f))
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("Your Stats", color = Color.White, fontWeight = FontWeight.SemiBold)
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text("Total Views: $totalViews", color = Color.White, fontSize = 16.sp)
-                                Text("Active Services: ${services.size}", color = Color.White, fontSize = 16.sp)
-                                Text("Favorites: ${favoriteServices.size}", color = Color.White, fontSize = 16.sp)
+                    )
+                }
+                Screen.DASHBOARD -> {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(paddingValues)
+                            .padding(16.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        item {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (profilePicUrl.isNotEmpty()) {
+                                    Image(
+                                        painter = rememberAsyncImagePainter(ImageRequest.Builder(LocalContext.current).data(profilePicUrl).build()),
+                                        contentDescription = "Profile Picture",
+                                        modifier = Modifier
+                                            .size(60.dp)
+                                            .clip(CircleShape)
+                                            .clickable { imagePickerLauncher.launch("image/*") }
+                                    )
+                                } else {
+                                    Image(
+                                        painter = painterResource(id = R.drawable.noprofile),
+                                        contentDescription = "Profile Placeholder",
+                                        modifier = Modifier
+                                            .size(60.dp)
+                                            .clip(CircleShape)
+                                            .clickable { imagePickerLauncher.launch("image/*") }
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text("Welcome back, $hustlerName 👋", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
                             }
-                        }
 
-                        Spacer(modifier = Modifier.height(24.dp))
+                            Spacer(modifier = Modifier.height(24.dp))
 
-// Reviews Section
-                        Text("Recent Reviews", color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
-
-                        var reviews by remember { mutableStateOf<List<Review>>(emptyList()) }
-
-// Fetch reviews for user's services
-                        LaunchedEffect(services) {
-                            if (services.isNotEmpty()) {
-                                val reviewsList = mutableListOf<Review>()
-                                services.forEach { service ->
-                                    firestore.collection("services").document(service.id).collection("reviews")
-                                        .get()
-                                        .addOnSuccessListener { snapshot ->
-                                            snapshot.documents.forEach { doc ->
-                                                val review = Review(
-                                                    id = doc.id,
-                                                    userId = doc.getString("userId") ?: "",
-                                                    userName = doc.getString("userName") ?: "Anonymous",
-                                                    rating = doc.getLong("rating")?.toInt() ?: 0,
-                                                    comment = doc.getString("comment") ?: "",
-                                                    timestamp = doc.getLong("timestamp") ?: 0,
-                                                    serviceId = service.id
-                                                )
-                                                reviewsList.add(review)
-                                            }
-                                            reviews = reviewsList.sortedByDescending { it.timestamp }.take(5)
-                                        }
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.15f))
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("Your Stats", color = Color.White, fontWeight = FontWeight.SemiBold)
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text("Total Views: $totalViews", color = Color.White, fontSize = 16.sp)
+                                    Text("Active Services: ${services.size}", color = Color.White, fontSize = 16.sp)
+                                    Text("Favorites: ${favoriteServices.size}", color = Color.White, fontSize = 16.sp)
                                 }
                             }
-                        }
 
-                        if (reviews.isNotEmpty()) {
-                            Column {
-                                reviews.forEach { review ->
-                                    Card(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 4.dp),
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.1f))
-                                    ) {
-                                        Column(modifier = Modifier.padding(12.dp)) {
-                                            // Rating stars
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Text("⭐".repeat(review.rating), color = Color(0xFFFFD700))
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Text("${review.rating}/5", color = Color.White, fontSize = 14.sp)
-                                            }
+                            Spacer(modifier = Modifier.height(24.dp))
 
-                                            Spacer(modifier = Modifier.height(8.dp))
+                            // Reviews Section
+                            Text("Recent Reviews", color = Color.White, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(bottom = 12.dp))
 
-                                            // Review comment
-                                            Text(
-                                                review.comment,
-                                                color = Color.White,
-                                                fontSize = 14.sp,
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
+                            var recentReviews by remember { mutableStateOf(listOf<Review>()) }
 
-                                            Spacer(modifier = Modifier.height(8.dp))
-
-                                            // Reviewer info and service
-                                            Row(
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                modifier = Modifier.fillMaxWidth()
-                                            ) {
-                                                Text(
-                                                    "By ${review.userName}",
-                                                    color = Color.White.copy(alpha = 0.7f),
-                                                    fontSize = 12.sp
-                                                )
-
-                                                services.find { it.id == review.serviceId }?.let { service ->
-                                                    Text(
-                                                        "For: ${service.name}",
-                                                        color = Color.White.copy(alpha = 0.7f),
-                                                        fontSize = 12.sp,
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis,
-                                                        modifier = Modifier.width(100.dp)
-                                                    )
+                            // Load reviews for user's services
+                            LaunchedEffect(currentUser?.uid, services) {
+                                currentUser?.uid?.let { uid ->
+                                    if (services.isNotEmpty()) {
+                                        val serviceIds = services.map { it.id }
+                                        if (serviceIds.isNotEmpty()) {
+                                            firestore.collection("reviews")
+                                                .whereIn("serviceId", serviceIds)
+                                                .orderBy("timestamp", Query.Direction.DESCENDING)
+                                                .limit(3)
+                                                .get()
+                                                .addOnSuccessListener { snapshot ->
+                                                    recentReviews = snapshot.documents.map { doc ->
+                                                        Review(
+                                                            id = doc.id,
+                                                            serviceId = doc.getString("serviceId") ?: "",
+                                                            userId = doc.getString("userId") ?: "",
+                                                            userName = doc.getString("userName") ?: "",
+                                                            rating = (doc.getLong("rating") ?: 0L).toInt(),
+                                                            comment = doc.getString("comment") ?: "",
+                                                            timestamp = doc.getLong("timestamp") ?: 0L
+                                                        )
+                                                    }
                                                 }
-                                            }
+                                                .addOnFailureListener { e ->
+                                                    Log.e("HustlerDashboard", "Error loading reviews: ${e.message}")
+                                                }
                                         }
                                     }
                                 }
                             }
-                        } else {
+
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.1f))
+                                    .padding(bottom = 24.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.15f))
                             ) {
-                                Column(
-                                    modifier = Modifier
-                                        .padding(16.dp)
-                                        .fillMaxWidth(),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Icon(
-                                        Icons.Default.Star,
-                                        contentDescription = "No reviews",
-                                        tint = Color.White.copy(alpha = 0.5f),
-                                        modifier = Modifier.size(32.dp)
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text(
-                                        "No reviews yet",
-                                        color = Color.White.copy(alpha = 0.7f),
-                                        fontSize = 14.sp
-                                    )
-                                    Text(
-                                        "Reviews will appear here once customers rate your services",
-                                        color = Color.White.copy(alpha = 0.5f),
-                                        fontSize = 12.sp,
-                                        textAlign = TextAlign.Center
-                                    )
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    if (recentReviews.isNotEmpty()) {
+                                        recentReviews.forEach { review ->
+                                            Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                                                // User and rating
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                ) {
+                                                    Text(review.userName, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                                    StarRating(
+                                                        rating = review.rating.toFloat(),
+                                                        onRatingChange = {},
+                                                        interactive = false,
+                                                        starSize = 16.dp
+                                                    )
+                                                }
+
+                                                Spacer(modifier = Modifier.height(4.dp))
+
+                                                // Comment
+                                                Text(
+                                                    review.comment,
+                                                    color = Color.White.copy(alpha = 0.8f),
+                                                    fontSize = 12.sp,
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+
+                                                Spacer(modifier = Modifier.height(4.dp))
+
+                                                // Service name
+                                                val serviceName = remember(review.serviceId) {
+                                                    services.find { it.id == review.serviceId }?.name ?: "Service"
+                                                }
+                                                Text(
+                                                    "For: $serviceName",
+                                                    color = Color.White.copy(alpha = 0.6f),
+                                                    fontSize = 10.sp
+                                                )
+                                            }
+
+                                            // Divider between reviews
+                                            if (review != recentReviews.last()) {
+                                                Divider(
+                                                    color = Color.White.copy(alpha = 0.2f),
+                                                    thickness = 1.dp,
+                                                    modifier = Modifier.padding(vertical = 8.dp)
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        Text(
+                                            "No reviews yet",
+                                            color = Color.White.copy(alpha = 0.7f),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 16.dp),
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
                                 }
                             }
-                        }
-                        // Recent Activity Section
-                        Text("Recent Activity", color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
 
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 24.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.15f))
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                if (services.isNotEmpty()) {
-                                    val recentServices = services.sortedByDescending { it.views }.take(3)
-                                    recentServices.forEach { service ->
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.padding(vertical = 8.dp)
-                                        ) {
+                            // Recent Activity Section
+                            Text("Recent Activity", color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
+
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 24.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.15f))
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    if (services.isNotEmpty()) {
+                                        val recentServices = services.sortedByDescending { it.views }.take(3)
+                                        recentServices.forEach { service ->
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.padding(vertical = 8.dp)
+                                            ) {
+                                                if (service.bannerUrl.isNotEmpty()) {
+                                                    Image(
+                                                        painter = rememberAsyncImagePainter(service.bannerUrl),
+                                                        contentDescription = service.name,
+                                                        contentScale = ContentScale.Crop,
+                                                        modifier = Modifier
+                                                            .size(40.dp)
+                                                            .clip(RoundedCornerShape(8.dp))
+                                                    )
+                                                } else {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(40.dp)
+                                                            .clip(RoundedCornerShape(8.dp))
+                                                            .background(Color(0xFF7F5A83)),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Icon(Icons.Default.Storefront, contentDescription = "Service", tint = Color.White, modifier = Modifier.size(20.dp))
+                                                    }
+                                                }
+                                                Spacer(modifier = Modifier.width(12.dp))
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(service.name, color = Color.White, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                    Text("${service.views} views", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        Text("No recent activity", color = Color.White.copy(alpha = 0.7f), modifier = Modifier.padding(vertical = 16.dp))
+                                    }
+                                }
+                            }
+
+                            // Your Services Section
+                            Text("Your Services", color = Color.White, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
+
+                        item {
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                modifier = Modifier.height(140.dp)
+                            ) {
+                                items(services) { service ->
+                                    Card(
+                                        modifier = Modifier
+                                            .width(120.dp)
+                                            .clickable {
+                                                val intent = Intent(context, EditServiceActivity::class.java)
+                                                intent.putExtra("serviceId", service.id)
+                                                context.startActivity(intent)
+                                            },
+                                        shape = RoundedCornerShape(16.dp),
+                                        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.1f))
+                                    ) {
+                                        Column {
                                             if (service.bannerUrl.isNotEmpty()) {
                                                 Image(
                                                     painter = rememberAsyncImagePainter(service.bannerUrl),
                                                     contentDescription = service.name,
                                                     contentScale = ContentScale.Crop,
                                                     modifier = Modifier
-                                                        .size(40.dp)
-                                                        .clip(RoundedCornerShape(8.dp))
+                                                        .height(80.dp)
+                                                        .fillMaxWidth()
                                                 )
                                             } else {
                                                 Box(
                                                     modifier = Modifier
-                                                        .size(40.dp)
-                                                        .clip(RoundedCornerShape(8.dp))
-                                                        .background(Color(0xFF7F5A83)),
+                                                        .height(80.dp)
+                                                        .fillMaxWidth()
+                                                        .background(
+                                                            Brush.verticalGradient(
+                                                                listOf(Color(0xFF7F5A83), Color(0xFF0D324D))
+                                                            )
+                                                        ),
                                                     contentAlignment = Alignment.Center
                                                 ) {
-                                                    Icon(Icons.Default.Storefront, contentDescription = "Service", tint = Color.White, modifier = Modifier.size(20.dp))
+                                                    Icon(Icons.Default.Storefront, contentDescription = "Service", tint = Color.White, modifier = Modifier.size(32.dp))
                                                 }
                                             }
-                                            Spacer(modifier = Modifier.width(12.dp))
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(service.name, color = Color.White, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                                Text("${service.views} views", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    Text("No recent activity", color = Color.White.copy(alpha = 0.7f), modifier = Modifier.padding(vertical = 16.dp))
-                                }
-                            }
-                        }
-
-                        // Your Services Section
-                        Text("Your Services", color = Color.White, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            items(services) { service ->
-                                Card(
-                                    modifier = Modifier
-                                        .width(120.dp)
-                                        .clickable {
-                                            val intent = Intent(context, EditServiceActivity::class.java)
-                                            intent.putExtra("serviceId", service.id)
-                                            context.startActivity(intent)
-                                        },
-                                    shape = RoundedCornerShape(16.dp),
-                                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.1f))
-                                ) {
-                                    Column {
-                                        if (service.bannerUrl.isNotEmpty()) {
-                                            Image(
-                                                painter = rememberAsyncImagePainter(service.bannerUrl),
-                                                contentDescription = service.name,
-                                                contentScale = ContentScale.Crop,
-                                                modifier = Modifier
-                                                    .height(80.dp)
-                                                    .fillMaxWidth()
+                                            Text(
+                                                service.name,
+                                                color = Color.White,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.padding(8.dp)
                                             )
-                                        } else {
-                                            Box(
-                                                modifier = Modifier
-                                                    .height(80.dp)
-                                                    .fillMaxWidth()
-                                                    .background(
-                                                        Brush.verticalGradient(
-                                                            listOf(Color(0xFF7F5A83), Color(0xFF0D324D))
-                                                        )
-                                                    ),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Icon(Icons.Default.Storefront, contentDescription = "Service", tint = Color.White, modifier = Modifier.size(32.dp))
-                                            }
                                         }
-                                        Text(
-                                            service.name,
-                                            color = Color.White,
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.padding(8.dp)
-                                        )
                                     }
                                 }
-                            }
 
-                            item {
-                                Card(
-                                    modifier = Modifier
-                                        .width(120.dp)
-                                        .clickable {
-                                            val intent = Intent(context, EditServiceActivity::class.java)
-                                            context.startActivity(intent)
-                                        },
-                                    shape = RoundedCornerShape(16.dp),
-                                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.1f))
-                                ) {
-                                    Column(
+                                item {
+                                    Card(
                                         modifier = Modifier
-                                            .height(120.dp)
-                                            .fillMaxWidth(),
-                                        verticalArrangement = Arrangement.Center,
-                                        horizontalAlignment = Alignment.CenterHorizontally
+                                            .width(120.dp)
+                                            .clickable {
+                                                val intent = Intent(context, EditServiceActivity::class.java)
+                                                context.startActivity(intent)
+                                            },
+                                        shape = RoundedCornerShape(16.dp),
+                                        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.1f))
                                     ) {
-                                        Icon(Icons.Default.Add, contentDescription = "Add Service", tint = Color.White, modifier = Modifier.size(40.dp))
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Text("Add Service", color = Color.White, fontSize = 14.sp)
+                                        Column(
+                                            modifier = Modifier
+                                                .height(120.dp)
+                                                .fillMaxWidth(),
+                                            verticalArrangement = Arrangement.Center,
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
+                                            Icon(Icons.Default.Add, contentDescription = "Add Service", tint = Color.White, modifier = Modifier.size(40.dp))
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text("Add Service", color = Color.White, fontSize = 14.sp)
+                                        }
                                     }
                                 }
                             }
@@ -723,27 +763,29 @@ fun HustlerDashboard(
                     }
                 }
             }
+        }
+    }
+}
 
-            // SEARCH SCREEN
-            AnimatedVisibility(
-                visible = showSearchBar,
-                enter = fadeIn(animationSpec = tween(300)),
-                exit = fadeOut(animationSpec = tween(300))
-            ) {
-                SearchScreen(
-                    allServices = allServices,
-                    searchQuery = searchQuery,
-                    onSearchQueryChange = { searchQuery = it },
-                    selectedCategory = selectedCategory,
-                    onSelectedCategoryChange = { selectedCategory = it },
-                    predefinedCategories = predefinedCategories,
-                    onServiceClick = { serviceId ->
-                        val intent = Intent(context, com.example.grindsphere.hustler.ServiceDetailActivity::class.java)
-                        intent.putExtra("serviceId", serviceId)
-                        context.startActivity(intent)
+@Composable
+fun StarRating(
+    rating: Float,
+    onRatingChange: (Float) -> Unit,
+    interactive: Boolean = true,
+    starSize: Dp = 24.dp
+) {
+    Row {
+        for (i in 1..5) {
+            Icon(
+                imageVector = if (i <= rating) Icons.Default.Star else Icons.Default.StarOutline,
+                contentDescription = "Star $i",
+                tint = if (i <= rating) Color(0xFFFFD700) else Color.Gray,
+                modifier = Modifier
+                    .size(starSize)
+                    .clickable(enabled = interactive) {
+                        onRatingChange(i.toFloat())
                     }
-                )
-            }
+            )
         }
     }
 }

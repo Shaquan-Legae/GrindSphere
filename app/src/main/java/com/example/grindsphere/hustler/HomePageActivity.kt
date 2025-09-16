@@ -154,7 +154,7 @@ fun HomePageScreen(
                             .width(280.dp)
                             .height(200.dp)
                             .clickable {
-                                val intent = Intent(context, com.example.grindsphere.hustler.ServiceDetailActivity::class.java)
+                                val intent = Intent(context, ServiceDetailActivity::class.java)
                                 intent.putExtra("serviceId", service.id)
                                 context.startActivity(intent)
                             },

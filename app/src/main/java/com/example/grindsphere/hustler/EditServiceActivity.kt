@@ -73,7 +73,7 @@ fun EditServiceScreen(serviceId: String?) {
     // categories
     val categoriesList = listOf(
         "Tutoring", "Design", "Tech Support", "Photography",
-        "Fashion", "Food", "Music", "Fitness", "Transport", "Nails", "Hair", "Beauty", "Cake"
+        "Fashion", "Food", "Music", "Fitness", "Transport", "Nails", "Hair", "Beauty", "Cake", "DJ"
     )
     var selectedCategories by remember { mutableStateOf(listOf<String>()) }
 
