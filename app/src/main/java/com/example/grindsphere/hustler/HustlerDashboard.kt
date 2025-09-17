@@ -1,12 +1,7 @@
 package com.example.grindsphere.hustler
 
 import android.util.Log
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import androidx.compose.material3.Divider
 import com.google.firebase.firestore.Query
-import android.R.attr.rating
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -25,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -52,6 +48,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
 import java.util.UUID
+import com.example.grindsphere.hustler.Review
 
 data class HustlerServiceCard(
     val id: String,
@@ -79,7 +76,7 @@ fun HustlerDashboard(
     var services by remember { mutableStateOf(listOf<HustlerServiceCard>()) }
     var favoriteServices by remember { mutableStateOf(listOf<HustlerServiceCard>()) }
     var allServices by remember { mutableStateOf(listOf<HustlerServiceCard>()) }
-    var totalViews by remember { mutableStateOf(0L) }
+    var totalViews by remember { mutableLongStateOf(0L) }
     var showMenu by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableIntStateOf(0) }
     var showSearchBar by remember { mutableStateOf(false) }
@@ -147,6 +144,7 @@ fun HustlerDashboard(
                         return@addSnapshotListener
                     }
                     val list = snapshot?.documents?.map { doc ->
+                        @Suppress("UNCHECKED_CAST")
                         HustlerServiceCard(
                             id = doc.id,
                             name = doc.getString("name") ?: "Service",
@@ -170,6 +168,7 @@ fun HustlerDashboard(
                 }
 
                 val list = snapshot?.documents?.map { doc ->
+                    @Suppress("UNCHECKED_CAST")
                     HustlerServiceCard(
                         id = doc.id,
                         name = doc.getString("name") ?: "Service",
@@ -186,14 +185,15 @@ fun HustlerDashboard(
         currentUser?.uid?.let { uid ->
             firestore.collection("users").document(uid).addSnapshotListener { snapshot, error ->
                 if (error != null) return@addSnapshotListener
-
+                @Suppress("UNCHECKED_CAST")
                 val savedServiceIds = snapshot?.get("savedServices") as? List<String> ?: listOf()
                 if (savedServiceIds.isNotEmpty()) {
                     firestore.collection("services")
                         .whereIn("__name__", savedServiceIds)
                         .get()
-                        .addOnSuccessListener { snapshot ->
-                            val favoriteList = snapshot.documents.map { doc ->
+                        .addOnSuccessListener { querySnapshot ->
+                            val favoriteList = querySnapshot.documents.map { doc ->
+                                @Suppress("UNCHECKED_CAST")
                                 HustlerServiceCard(
                                     id = doc.id,
                                     name = doc.getString("name") ?: "Service",
@@ -207,25 +207,6 @@ fun HustlerDashboard(
                 } else {
                     favoriteServices = listOf()
                 }
-            }
-        }
-    }
-
-    val filteredServices = remember(searchQuery, selectedCategory, allServices) {
-        if (searchQuery.isBlank() && selectedCategory.isBlank()) {
-            allServices.sortedByDescending { it.views }
-        } else {
-            allServices.filter { service ->
-                val matchesName = searchQuery.isBlank() || service.name.contains(searchQuery, ignoreCase = true)
-                val matchesCategorySearch = if (searchQuery.isNotBlank()) {
-                    service.categories.any { category -> category.contains(searchQuery, ignoreCase = true) }
-                } else { false }
-                val matchesCategoryFilter = if (selectedCategory.isBlank()) {
-                    true
-                } else {
-                    service.categories.any { it.equals(selectedCategory, ignoreCase = true) }
-                }
-                (matchesName || matchesCategorySearch) && matchesCategoryFilter
             }
         }
     }
@@ -358,7 +339,7 @@ fun HustlerDashboard(
                                 .clickable { showFavorites = false }
                                 .padding(bottom = 16.dp)
                         ) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Back to Dashboard", tint = Color.White)
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to Dashboard", tint = Color.White)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Back to Dashboard", color = Color.White, fontSize = 16.sp)
                         }
@@ -491,7 +472,7 @@ fun HustlerDashboard(
 
                             // Load reviews for user's services
                             LaunchedEffect(currentUser?.uid, services) {
-                                currentUser?.uid?.let { uid ->
+                                currentUser?.uid?.let {
                                     if (services.isNotEmpty()) {
                                         val serviceIds = services.map { it.id }
                                         if (serviceIds.isNotEmpty()) {
@@ -573,7 +554,7 @@ fun HustlerDashboard(
 
                                             // Divider between reviews
                                             if (review != recentReviews.last()) {
-                                                Divider(
+                                                HorizontalDivider(
                                                     color = Color.White.copy(alpha = 0.2f),
                                                     thickness = 1.dp,
                                                     modifier = Modifier.padding(vertical = 8.dp)
@@ -641,7 +622,7 @@ fun HustlerDashboard(
                                     } else {
                                         Text("No recent activity", color = Color.White.copy(alpha = 0.7f), modifier = Modifier.padding(vertical = 16.dp))
                                     }
-                                }
+                                 }
                             }
 
                             // Your Services Section
@@ -768,7 +749,7 @@ fun StarRating(
     Row {
         for (i in 1..5) {
             Icon(
-                imageVector = if (i <= rating) Icons.Default.Star else Icons.Default.StarOutline,
+                imageVector = if (i <= rating) Icons.Default.Star else Icons.Default.StarBorder,
                 contentDescription = "Star $i",
                 tint = if (i <= rating) Color(0xFFFFD700) else Color.Gray,
                 modifier = Modifier
