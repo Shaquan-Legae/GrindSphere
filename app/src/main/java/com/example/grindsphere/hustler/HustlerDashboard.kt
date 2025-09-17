@@ -22,10 +22,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -63,11 +61,6 @@ data class HustlerServiceCard(
     val categories: List<String> = listOf()
 )
 
-// Add this enum to track screens
-enum class Screen {
-    DASHBOARD, MESSAGES, SEARCH, HOME, FAVORITES
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HustlerDashboard(
@@ -89,24 +82,20 @@ fun HustlerDashboard(
     var totalViews by remember { mutableStateOf(0L) }
     var showMenu by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableIntStateOf(0) }
+    var showSearchBar by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
+    var showMessagesScreen by remember { mutableStateOf(false) }
+    var showFavorites by remember { mutableStateOf(false) }
     var selectedCategory by remember { mutableStateOf("") }
-
-    // Use a single source of truth for current screen
-    var currentScreen by remember { mutableStateOf(Screen.DASHBOARD) }
 
     LaunchedEffect(viewModelSelectedCategory) {
         selectedCategory = viewModelSelectedCategory
     }
 
-    LaunchedEffect(selectedTab) {
-        // Update current screen based on selected tab
-        currentScreen = when (selectedTab) {
-            0 -> Screen.DASHBOARD
-            1 -> Screen.MESSAGES
-            2 -> Screen.SEARCH
-            3 -> Screen.HOME
-            else -> Screen.DASHBOARD
+    LaunchedEffect(showSearchBar) {
+        if (!showSearchBar) {
+            viewModel.clearSelectedCategory()
+            selectedCategory = ""
         }
     }
 
@@ -246,24 +235,21 @@ fun HustlerDashboard(
             TopAppBar(
                 title = {
                     Text(
-                        when (currentScreen) {
-                            Screen.MESSAGES -> "Messages"
-                            Screen.HOME -> "Home"
-                            Screen.SEARCH -> "Search"
-                            Screen.FAVORITES -> "Favorites"
-                            Screen.DASHBOARD -> "Dashboard"
+                        when {
+                            showMessagesScreen -> "Messages"
+                            selectedTab == 3 -> "Home"
+                            selectedTab == 2 -> "Search"
+                            selectedTab == 1 -> "Messages"
+                            showFavorites -> "Favorites"
+                            else -> "Dashboard"
                         },
                         color = Color.White
                     )
                 },
                 actions = {
-                    // Only show favorites icon on Dashboard screen
-                    if (currentScreen == Screen.DASHBOARD && favoriteServices.isNotEmpty()) {
+                    if (!showFavorites && favoriteServices.isNotEmpty()) {
                         IconButton(
-                            onClick = {
-                                currentScreen = Screen.FAVORITES
-                                selectedTab = -1 // Clear tab selection for favorites
-                            },
+                            onClick = { showFavorites = true },
                             modifier = Modifier.padding(end = 8.dp)
                         ) {
                             Icon(Icons.Default.Star, contentDescription = "Favorites", tint = Color(0xFFFFD700))
@@ -288,46 +274,50 @@ fun HustlerDashboard(
             )
         },
         bottomBar = {
-            // Only show bottom nav when not in favorites
-            if (currentScreen != Screen.FAVORITES) {
-                NavigationBar(containerColor = Color.White) {
-                    NavigationBarItem(
-                        selected = currentScreen == Screen.HOME,
-                        onClick = {
-                            selectedTab = 3
-                            currentScreen = Screen.HOME
-                        },
-                        icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
-                        label = { Text("Home") }
-                    )
-                    NavigationBarItem(
-                        selected = currentScreen == Screen.SEARCH,
-                        onClick = {
-                            selectedTab = 2
-                            currentScreen = Screen.SEARCH
-                        },
-                        icon = { Icon(Icons.Default.Search, contentDescription = "Search") },
-                        label = { Text("Search") }
-                    )
-                    NavigationBarItem(
-                        selected = currentScreen == Screen.MESSAGES,
-                        onClick = {
-                            selectedTab = 1
-                            currentScreen = Screen.MESSAGES
-                        },
-                        icon = { Icon(Icons.Default.MailOutline, contentDescription = "Messages") },
-                        label = { Text("Messages") }
-                    )
-                    NavigationBarItem(
-                        selected = currentScreen == Screen.DASHBOARD,
-                        onClick = {
-                            selectedTab = 0
-                            currentScreen = Screen.DASHBOARD
-                        },
-                        icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
-                        label = { Text("Profile") }
-                    )
-                }
+            NavigationBar(containerColor = Color.White) {
+                NavigationBarItem(
+                    selected = selectedTab == 3,
+                    onClick = {
+                        selectedTab = 3
+                        showSearchBar = false
+                        showMessagesScreen = false
+                        showFavorites = false
+                    },
+                    icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
+                    label = { Text("Home") }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 2,
+                    onClick = {
+                        selectedTab = 2
+                        showSearchBar = true
+                        showMessagesScreen = false
+                        showFavorites = false
+                    },
+                    icon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                    label = { Text("Search") }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 1,
+                    onClick = {
+                        selectedTab = 1
+                        showMessagesScreen = true
+                        showFavorites = false
+                    },
+                    icon = { Icon(Icons.Default.MailOutline, contentDescription = "Messages") },
+                    label = { Text("Messages") }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 0,
+                    onClick = {
+                        selectedTab = 0
+                        showSearchBar = false
+                        showMessagesScreen = false
+                        showFavorites = false
+                    },
+                    icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
+                    label = { Text("Profile") }
+                )
             }
         }
     ) { paddingValues ->
@@ -336,8 +326,8 @@ fun HustlerDashboard(
                 .fillMaxSize()
                 .background(Brush.verticalGradient(listOf(Color(0xFF0D324D), Color(0xFF7F5A83))))
         ) {
-            when (currentScreen) {
-                Screen.MESSAGES -> {
+            when {
+                showMessagesScreen -> {
                     MessagesScreen(
                         onOpenChat = { customerUid, customerName ->
                             val intent = Intent(context, ChatScreenActivity::class.java)
@@ -351,25 +341,21 @@ fun HustlerDashboard(
                         }
                     )
                 }
-                Screen.HOME -> {
+                selectedTab == 3 -> {
                     HomePageScreen(
                         onNavigateToSearch = {
-                            currentScreen = Screen.SEARCH
                             selectedTab = 2
+                            showSearchBar = true
                         },
                         viewModel = viewModel
                     )
                 }
-                Screen.FAVORITES -> {
+                showFavorites -> {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
-                                .verticalScroll(rememberScrollState())
-                                .clickable {
-                                    currentScreen = Screen.DASHBOARD
-                                    selectedTab = 0
-                                }
+                                .clickable { showFavorites = false }
                                 .padding(bottom = 16.dp)
                         ) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "Back to Dashboard", tint = Color.White)
@@ -386,7 +372,7 @@ fun HustlerDashboard(
                         } else {
                             LazyRow(
                                 horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                modifier = Modifier.height(140.dp)
+                                modifier = Modifier.height(140.dp) // FIXED HEIGHT
                             ) {
                                 items(favoriteServices) { service ->
                                     Card(
@@ -447,28 +433,12 @@ fun HustlerDashboard(
                         }
                     }
                 }
-                Screen.SEARCH -> {
-                    SearchScreen(
-                        allServices = allServices,
-                        searchQuery = searchQuery,
-                        onSearchQueryChange = { searchQuery = it },
-                        selectedCategory = selectedCategory,
-                        onSelectedCategoryChange = { selectedCategory = it },
-                        predefinedCategories = predefinedCategories,
-                        onServiceClick = { serviceId ->
-                            val intent = Intent(context, ServiceDetailActivity::class.java)
-                            intent.putExtra("serviceId", serviceId)
-                            context.startActivity(intent)
-                        }
-                    )
-                }
-                Screen.DASHBOARD -> {
-                    LazyColumn(
+                else -> {
+                    LazyColumn( // CHANGED FROM Column TO LazyColumn
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(paddingValues)
                             .padding(16.dp)
-                            .verticalScroll(rememberScrollState())
                     ) {
                         item {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -570,7 +540,7 @@ fun HustlerDashboard(
                                                 ) {
                                                     Text(review.userName, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                                                     StarRating(
-                                                        rating = review.rating.toFloat(),
+                                                        rating = review.rating.toFloat(), // FIXED: Convert Int to Float
                                                         onRatingChange = {},
                                                         interactive = false,
                                                         starSize = 16.dp
@@ -682,7 +652,7 @@ fun HustlerDashboard(
                         item {
                             LazyRow(
                                 horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                modifier = Modifier.height(140.dp)
+                                modifier = Modifier.height(140.dp) // FIXED: ADDED HEIGHT CONSTRAINT
                             ) {
                                 items(services) { service ->
                                     Card(
@@ -762,6 +732,27 @@ fun HustlerDashboard(
                         }
                     }
                 }
+            }
+
+            // SEARCH SCREEN
+            AnimatedVisibility(
+                visible = showSearchBar,
+                enter = fadeIn(animationSpec = tween(300)),
+                exit = fadeOut(animationSpec = tween(300))
+            ) {
+                SearchScreen(
+                    allServices = allServices,
+                    searchQuery = searchQuery,
+                    onSearchQueryChange = { searchQuery = it },
+                    selectedCategory = selectedCategory,
+                    onSelectedCategoryChange = { selectedCategory = it },
+                    predefinedCategories = predefinedCategories,
+                    onServiceClick = { serviceId ->
+                        val intent = Intent(context, ServiceDetailActivity::class.java)
+                        intent.putExtra("serviceId", serviceId)
+                        context.startActivity(intent)
+                    }
+                )
             }
         }
     }

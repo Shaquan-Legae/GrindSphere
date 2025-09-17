@@ -103,12 +103,6 @@ fun ServiceDetailScreen(serviceId: String?) {
                                 val saved = userDoc.get("savedServices") as? List<String> ?: listOf()
                                 isFavorite = saved.contains(serviceId)
                             }
-                            .addOnFailureListener {
-                                // Handle error
-                                isFavorite = false
-                            }
-                    } else {
-                        isFavorite = false
                     }
                 }
         }
@@ -603,13 +597,13 @@ fun ReviewItem(review: Review) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
+            // Comment - show full comment without truncation
             Text(
                 text = review.comment,
                 color = Color.White.copy(alpha = 0.8f),
                 fontSize = 14.sp,
                 modifier = Modifier.fillMaxWidth()
             )
-
 
             Spacer(modifier = Modifier.height(8.dp))
 
