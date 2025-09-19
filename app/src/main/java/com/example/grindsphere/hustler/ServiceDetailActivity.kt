@@ -82,7 +82,7 @@ fun ServiceDetailScreen(serviceId: String?) {
                 .addOnSuccessListener { doc ->
                     serviceName = doc.getString("name") ?: ""
                     description = doc.getString("description") ?: ""
-                    bannerUrl = doc.getString("banner") ?: ""
+                    bannerUrl = doc.getString("bannerUrl") ?: ""
                     categories = doc.get("categories") as? List<String> ?: listOf()
                     images = doc.get("images") as? List<String> ?: listOf()
                     ownerUid = doc.getString("ownerUid") ?: ""
@@ -440,8 +440,32 @@ fun ServiceDetailScreen(serviceId: String?) {
             ) {
                 Button(
                     onClick = {
-                        // Book Now logic
-                        Toast.makeText(context, "Booking request sent!", Toast.LENGTH_SHORT).show()
+                        // Implement proper booking logic
+                        val currentUserId = auth.currentUser?.uid
+                        if (currentUserId != null && serviceId != null) {
+                            val booking = hashMapOf(
+                                "serviceId" to serviceId,
+                                "customerId" to currentUserId,
+                                "serviceOwnerId" to ownerUid,
+                                "serviceName" to serviceName,
+                                "status" to "pending",
+                                "timestamp" to System.currentTimeMillis(),
+                                "customerName" to (auth.currentUser?.displayName ?: "Customer")
+                            )
+                            
+                            firestore.collection("bookings").add(booking)
+                                .addOnSuccessListener {
+                                    // Update booking count
+                                    firestore.collection("services").document(serviceId)
+                                        .update("bookings", FieldValue.increment(1))
+                                    Toast.makeText(context, "Booking request sent successfully!", Toast.LENGTH_SHORT).show()
+                                }
+                                .addOnFailureListener {
+                                    Toast.makeText(context, "Failed to send booking request", Toast.LENGTH_SHORT).show()
+                                }
+                        } else {
+                            Toast.makeText(context, "Please log in to book this service", Toast.LENGTH_SHORT).show()
+                        }
                     },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7F5A83))

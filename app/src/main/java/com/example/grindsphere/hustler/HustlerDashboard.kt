@@ -50,6 +50,17 @@ import com.google.firebase.storage.FirebaseStorage
 import java.util.UUID
 import com.example.grindsphere.hustler.Review
 
+data class Booking(
+    val id: String = "",
+    val serviceId: String = "",
+    val customerId: String = "",
+    val serviceOwnerId: String = "",
+    val serviceName: String = "",
+    val customerName: String = "",
+    val status: String = "pending", // pending, accepted, completed, cancelled
+    val timestamp: Long = 0L
+)
+
 data class HustlerServiceCard(
     val id: String,
     val name: String,
@@ -148,7 +159,7 @@ fun HustlerDashboard(
                         HustlerServiceCard(
                             id = doc.id,
                             name = doc.getString("name") ?: "Service",
-                            bannerUrl = doc.getString("banner") ?: "",
+                            bannerUrl = doc.getString("bannerUrl") ?: "",
                             views = doc.getLong("views") ?: 0L,
                             categories = doc.get("categories") as? List<String> ?: listOf()
                         )
@@ -172,7 +183,7 @@ fun HustlerDashboard(
                     HustlerServiceCard(
                         id = doc.id,
                         name = doc.getString("name") ?: "Service",
-                        bannerUrl = doc.getString("banner") ?: "",
+                        bannerUrl = doc.getString("bannerUrl") ?: "",
                         views = doc.getLong("views") ?: 0L,
                         categories = doc.get("categories") as? List<String> ?: listOf()
                     )
@@ -197,7 +208,7 @@ fun HustlerDashboard(
                                 HustlerServiceCard(
                                     id = doc.id,
                                     name = doc.getString("name") ?: "Service",
-                                    bannerUrl = doc.getString("banner") ?: "",
+                                    bannerUrl = doc.getString("bannerUrl") ?: "",
                                     views = doc.getLong("views") ?: 0L,
                                     categories = doc.get("categories") as? List<String> ?: listOf()
                                 )
@@ -251,7 +262,11 @@ fun HustlerDashboard(
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color(0xFF0D324D).copy(alpha = 0.9f), // Semi-transparent dark blue
+                    titleContentColor = Color.White,
+                    actionIconContentColor = Color.White
+                )
             )
         },
         bottomBar = {
@@ -464,6 +479,117 @@ fun HustlerDashboard(
 
                             Spacer(modifier = Modifier.height(24.dp))
 
+                            // Recent Bookings Section
+                            Text("Recent Bookings", color = Color.White, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(bottom = 12.dp))
+
+                            var recentBookings by remember { mutableStateOf(listOf<Booking>()) }
+
+                            // Load recent bookings for user's services
+                            LaunchedEffect(currentUser?.uid) {
+                                currentUser?.uid?.let { uid ->
+                                    firestore.collection("bookings")
+                                        .whereEqualTo("serviceOwnerId", uid)
+                                        .orderBy("timestamp", Query.Direction.DESCENDING)
+                                        .limit(5)
+                                        .addSnapshotListener { snapshot, error ->
+                                            if (error != null) {
+                                                Log.e("HustlerDashboard", "Error loading bookings: ${error.message}")
+                                                return@addSnapshotListener
+                                            }
+                                            recentBookings = snapshot?.documents?.map { doc ->
+                                                Booking(
+                                                    id = doc.id,
+                                                    serviceId = doc.getString("serviceId") ?: "",
+                                                    customerId = doc.getString("customerId") ?: "",
+                                                    serviceOwnerId = doc.getString("serviceOwnerId") ?: "",
+                                                    serviceName = doc.getString("serviceName") ?: "",
+                                                    customerName = doc.getString("customerName") ?: "",
+                                                    status = doc.getString("status") ?: "pending",
+                                                    timestamp = doc.getLong("timestamp") ?: 0L
+                                                )
+                                            } ?: listOf()
+                                        }
+                                }
+                            }
+
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 24.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.15f))
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    if (recentBookings.isNotEmpty()) {
+                                        recentBookings.forEach { booking ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 8.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        booking.serviceName,
+                                                        color = Color.White,
+                                                        fontSize = 14.sp,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                    Text(
+                                                        "Customer: ${booking.customerName}",
+                                                        color = Color.White.copy(alpha = 0.8f),
+                                                        fontSize = 12.sp
+                                                    )
+                                                }
+                                                
+                                                // Status badge
+                                                Card(
+                                                    colors = CardDefaults.cardColors(
+                                                        containerColor = when (booking.status) {
+                                                            "pending" -> Color(0xFFFFA500)
+                                                            "accepted" -> Color(0xFF4CAF50)
+                                                            "completed" -> Color(0xFF2196F3)
+                                                            "cancelled" -> Color(0xFFF44336)
+                                                            else -> Color.Gray
+                                                        }
+                                                    ),
+                                                    modifier = Modifier.padding(start = 8.dp)
+                                                ) {
+                                                    Text(
+                                                        booking.status.uppercase(),
+                                                        color = Color.White,
+                                                        fontSize = 10.sp,
+                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
+                                            }
+                                            
+                                            if (booking != recentBookings.last()) {
+                                                HorizontalDivider(
+                                                    color = Color.White.copy(alpha = 0.2f),
+                                                    thickness = 1.dp,
+                                                    modifier = Modifier.padding(vertical = 8.dp)
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        Text(
+                                            "No bookings yet",
+                                            color = Color.White.copy(alpha = 0.7f),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 16.dp),
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(24.dp))
+
                             // Reviews Section
                             Text("Recent Reviews", color = Color.White, fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(bottom = 12.dp))
@@ -521,7 +647,7 @@ fun HustlerDashboard(
                                                 ) {
                                                     Text(review.userName, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                                                     StarRating(
-                                                        rating = review.rating.toFloat(), // FIXED: Convert Int to Float
+                                                        rating = review.rating.toFloat(), // Convert Int to Float for this StarRating
                                                         onRatingChange = {},
                                                         interactive = false,
                                                         starSize = 16.dp

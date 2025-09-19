@@ -7,7 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -73,7 +73,7 @@ fun HomePageScreen(
                     HustlerServiceCard(
                         id = doc.id,
                         name = doc.getString("name") ?: "Service",
-                        bannerUrl = doc.getString("banner") ?: "",
+                        bannerUrl = doc.getString("bannerUrl") ?: "",
                         views = doc.getLong("views") ?: 0L,
                         categories = doc.get("categories") as? List<String> ?: listOf()
                     )
@@ -88,6 +88,7 @@ fun HomePageScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
+            .statusBarsPadding() // Add proper status bar padding
             .background(
                 Brush.verticalGradient(
                     listOf(
