@@ -544,26 +544,74 @@ fun HustlerDashboard(
                                                     )
                                                 }
                                                 
-                                                // Status badge
-                                                Card(
-                                                    colors = CardDefaults.cardColors(
-                                                        containerColor = when (booking.status) {
-                                                            "pending" -> Color(0xFFFFA500)
-                                                            "accepted" -> Color(0xFF4CAF50)
-                                                            "completed" -> Color(0xFF2196F3)
-                                                            "cancelled" -> Color(0xFFF44336)
-                                                            else -> Color.Gray
+                                                Column {
+                                                    // Status badge
+                                                    Card(
+                                                        colors = CardDefaults.cardColors(
+                                                            containerColor = when (booking.status) {
+                                                                "pending" -> Color(0xFFFFA500)
+                                                                "accepted" -> Color(0xFF4CAF50)
+                                                                "completed" -> Color(0xFF2196F3)
+                                                                "cancelled" -> Color(0xFFF44336)
+                                                                else -> Color.Gray
+                                                            }
+                                                        ),
+                                                        modifier = Modifier.padding(start = 8.dp)
+                                                    ) {
+                                                        Text(
+                                                            booking.status.uppercase(),
+                                                            color = Color.White,
+                                                            fontSize = 10.sp,
+                                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                            fontWeight = FontWeight.Bold
+                                                        )
+                                                    }
+                                                    
+                                                    // Action buttons for pending bookings
+                                                    if (booking.status == "pending") {
+                                                        Row(
+                                                            modifier = Modifier.padding(top = 4.dp),
+                                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                        ) {
+                                                            // Accept button
+                                                            Card(
+                                                                colors = CardDefaults.cardColors(containerColor = Color(0xFF4CAF50)),
+                                                                modifier = Modifier.clickable {
+                                                                    firestore.collection("bookings").document(booking.id)
+                                                                        .update("status", "accepted")
+                                                                        .addOnSuccessListener {
+                                                                            Toast.makeText(context, "Booking accepted!", Toast.LENGTH_SHORT).show()
+                                                                        }
+                                                                }
+                                                            ) {
+                                                                Text(
+                                                                    "Accept",
+                                                                    color = Color.White,
+                                                                    fontSize = 8.sp,
+                                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                                )
+                                                            }
+                                                            
+                                                            // Reject button
+                                                            Card(
+                                                                colors = CardDefaults.cardColors(containerColor = Color(0xFFF44336)),
+                                                                modifier = Modifier.clickable {
+                                                                    firestore.collection("bookings").document(booking.id)
+                                                                        .update("status", "cancelled")
+                                                                        .addOnSuccessListener {
+                                                                            Toast.makeText(context, "Booking rejected!", Toast.LENGTH_SHORT).show()
+                                                                        }
+                                                                }
+                                                            ) {
+                                                                Text(
+                                                                    "Reject",
+                                                                    color = Color.White,
+                                                                    fontSize = 8.sp,
+                                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                                )
+                                                            }
                                                         }
-                                                    ),
-                                                    modifier = Modifier.padding(start = 8.dp)
-                                                ) {
-                                                    Text(
-                                                        booking.status.uppercase(),
-                                                        color = Color.White,
-                                                        fontSize = 10.sp,
-                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                                        fontWeight = FontWeight.Bold
-                                                    )
+                                                    }
                                                 }
                                             }
                                             

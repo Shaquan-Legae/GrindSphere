@@ -473,6 +473,34 @@ fun ServiceDetailScreen(serviceId: String?) {
                     Text("Book Now")
                 }
 
+                // Message Button
+                Button(
+                    onClick = {
+                        val currentUserId = auth.currentUser?.uid
+                        if (currentUserId != null && ownerUid.isNotEmpty() && currentUserId != ownerUid) {
+                            // Create conversation ID (sorted to ensure consistency)
+                            val participants = listOf(currentUserId, ownerUid).sorted()
+                            val conversationId = participants.joinToString("_")
+                            
+                            // Navigate to chat screen
+                            val intent = Intent(context, ChatScreenActivity::class.java).apply {
+                                putExtra("conversationId", conversationId)
+                                putExtra("customerUid", ownerUid)
+                                putExtra("customerName", ownerName)
+                            }
+                            context.startActivity(intent)
+                        } else if (currentUserId == ownerUid) {
+                            Toast.makeText(context, "You can't message yourself", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "Please log in to send messages", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D324D))
+                ) {
+                    Text("Message")
+                }
+
                 // Favorite Button with Star Icon
                 IconButton(
                     onClick = {
@@ -596,7 +624,8 @@ fun ServiceDetailScreen(serviceId: String?) {
 fun ReviewItem(review: Review) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.1f))
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.2f)), // Increased opacity
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             // User name and rating
@@ -622,14 +651,16 @@ fun ReviewItem(review: Review) {
             Spacer(modifier = Modifier.height(8.dp))
 
             // Comment - show full comment without truncation
-            Text(
-                text = review.comment,
-                color = Color.White.copy(alpha = 0.8f),
-                fontSize = 14.sp,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
+            if (review.comment.isNotEmpty()) {
+                Text(
+                    text = review.comment,
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    modifier = Modifier.fillMaxWidth(),
+                    lineHeight = 20.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
 
             // Timestamp
             Text(
