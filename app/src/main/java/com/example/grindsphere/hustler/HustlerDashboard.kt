@@ -305,8 +305,8 @@ fun HustlerDashboard(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Brush.verticalGradient(listOf(Color(0xFF0D324D), Color(0xFF7F5A83))))
-        ) {
+                .padding(paddingValues) // THIS IS CRUCIAL - apply the scaffold padding
+                .background(Brush.verticalGradient(listOf(Color(0xFF0D324D), Color(0xFF7F5A83)))))
             when {
                 showMessagesScreen -> {
                     MessagesScreen(
@@ -737,7 +737,7 @@ fun HustlerDashboard(
             }
         }
     }
-}
+
 
 @Composable
 fun StarRating(

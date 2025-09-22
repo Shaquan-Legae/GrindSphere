@@ -572,7 +572,7 @@ fun ServiceDetailScreen(serviceId: String?) {
 fun ReviewItem(review: Review) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.1f))
+        colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             // User name and rating
@@ -584,11 +584,11 @@ fun ReviewItem(review: Review) {
                 Text(
                     text = review.userName,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = Color.Black
                 )
 
                 StarRating(
-                    rating = review.rating,
+                    rating = review.rating.toFloat(),
                     onRatingChange = {},
                     interactive = false,
                     starSize = 16.dp
@@ -600,7 +600,7 @@ fun ReviewItem(review: Review) {
             // Comment - show full comment without truncation
             Text(
                 text = review.comment,
-                color = Color.White.copy(alpha = 0.8f),
+                color = Color.Black.copy(alpha = 0.8f),
                 fontSize = 14.sp,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -610,7 +610,7 @@ fun ReviewItem(review: Review) {
             // Timestamp
             Text(
                 text = formatTimestamp(review.timestamp),
-                color = Color.White.copy(alpha = 0.6f),
+                color = Color.Black.copy(alpha = 0.6f),
                 fontSize = 12.sp
             )
         }
