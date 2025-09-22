@@ -35,7 +35,6 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -403,12 +402,11 @@ fun ServiceDetailScreen(serviceId: String?) {
                     .padding(horizontal = 16.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7F5A83))
             ) {
-                Text("Add Review")
+                Text("Add Review", color = Color.White) // keep button text white
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(16.dp)) // Reviews List
 
-            // Reviews List
             if (reviews.isEmpty()) {
                 Text(
                     text = "No reviews yet. Be the first to review!",
@@ -420,14 +418,56 @@ fun ServiceDetailScreen(serviceId: String?) {
                 )
             } else {
                 Column(
-                    modifier = Modifier.padding(horizontal = 16.dp)
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
                 ) {
                     reviews.forEach { review ->
-                        ReviewItem(review = review)
+                        // Wrap each review in a white Card
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White) // White background
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                // User name and rating
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        review.userName,
+                                        color = Color.Black, // black text for username
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+                                    StarRating(
+                                        rating = review.rating,
+                                        onRatingChange = {},
+                                        interactive = false,
+                                        starSize = 16.dp
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                // Review comment
+                                Text(
+                                    review.comment,
+                                    color = Color.Black, // black text for comment
+                                    fontSize = 12.sp
+                                )
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                            }
+                        }
+
                         Spacer(modifier = Modifier.height(12.dp))
                     }
                 }
             }
+
 
             Spacer(modifier = Modifier.height(16.dp))
 

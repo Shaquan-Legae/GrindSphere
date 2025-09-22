@@ -12,7 +12,7 @@ class HomePageClass : ComponentActivity() {
         override fun onCreate(savedInstanceState: Bundle?) {
             super.onCreate(savedInstanceState)
             setContent {
-                GrindSphereTheme {
+                GrindSphereTheme() {
                     HomePageScreen(
                         onNavigateToSearch = {
                             // Navigate to HustlerDashboard with search open
