@@ -1,6 +1,5 @@
 package com.example.grindsphere.hustler
 
-import android.R.attr.rating
 import android.util.Log
 import com.google.firebase.firestore.Query
 import android.content.Intent
@@ -49,7 +48,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
 import java.util.UUID
-
+import com.example.grindsphere.hustler.Review
 
 data class HustlerServiceCard(
     val id: String,
@@ -212,7 +211,6 @@ fun HustlerDashboard(
         }
     }
 
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -253,9 +251,8 @@ fun HustlerDashboard(
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF0D324D)
-                ))
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+            )
         },
         bottomBar = {
             NavigationBar(containerColor = Color.White) {
@@ -275,7 +272,7 @@ fun HustlerDashboard(
                     onClick = {
                         selectedTab = 2
                         showSearchBar = true
-                        showMessagesScreen = false   // ✅ Reset messages
+                        showMessagesScreen = false
                         showFavorites = false
                     },
                     icon = { Icon(Icons.Default.Search, contentDescription = "Search") },
@@ -286,7 +283,6 @@ fun HustlerDashboard(
                     onClick = {
                         selectedTab = 1
                         showMessagesScreen = true
-                        showSearchBar = false        // ✅ Reset search
                         showFavorites = false
                     },
                     icon = { Icon(Icons.Default.MailOutline, contentDescription = "Messages") },
@@ -305,18 +301,13 @@ fun HustlerDashboard(
                 )
             }
         }
-
-
     ) { paddingValues ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = paddingValues.calculateTopPadding())
-                .background(Brush.verticalGradient(listOf(Color(0xFF0D324D), Color(0xFF7F5A83)))
-                )) {
+                .padding(paddingValues) // THIS IS CRUCIAL - apply the scaffold padding
+                .background(Brush.verticalGradient(listOf(Color(0xFF0D324D), Color(0xFF7F5A83)))))
             when {
-
-
                 showMessagesScreen -> {
                     MessagesScreen(
                         onOpenChat = { customerUid, customerName ->
@@ -340,7 +331,7 @@ fun HustlerDashboard(
                         viewModel = viewModel
                     )
                 }
-    showFavorites -> {
+                showFavorites -> {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -361,7 +352,8 @@ fun HustlerDashboard(
                             }
                         } else {
                             LazyRow(
-                                horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.height(140.dp) // FIXED HEIGHT
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                modifier = Modifier.height(140.dp) // FIXED HEIGHT
                             ) {
                                 items(favoriteServices) { service ->
                                     Card(
@@ -477,18 +469,6 @@ fun HustlerDashboard(
                                 modifier = Modifier.padding(bottom = 12.dp))
 
                             var recentReviews by remember { mutableStateOf(listOf<Review>()) }
-                            val comment = null
-                            val serviceId = null
-                            val review = hashMapOf(
-                                "serviceId" to serviceId,
-                                "userId" to currentUser?.uid,
-                                "userName" to currentUser?.displayName,
-                                "rating" to rating,
-                                "comment" to comment,
-                                "timestamp" to System.currentTimeMillis()
-                            )
-                            firestore.collection("reviews").add(review)
-
 
                             // Load reviews for user's services
                             LaunchedEffect(currentUser?.uid, services) {
@@ -500,12 +480,9 @@ fun HustlerDashboard(
                                                 .whereIn("serviceId", serviceIds)
                                                 .orderBy("timestamp", Query.Direction.DESCENDING)
                                                 .limit(3)
-                                                .addSnapshotListener { snapshot, error ->
-                                                    if (error != null) {
-                                                        Log.e("HustlerDashboard", "Error loading reviews: ${error.message}")
-                                                        return@addSnapshotListener
-                                                    }
-                                                    recentReviews = snapshot?.documents?.map { doc ->
+                                                .get()
+                                                .addOnSuccessListener { snapshot ->
+                                                    recentReviews = snapshot.documents.map { doc ->
                                                         Review(
                                                             id = doc.id,
                                                             serviceId = doc.getString("serviceId") ?: "",
@@ -515,10 +492,11 @@ fun HustlerDashboard(
                                                             comment = doc.getString("comment") ?: "",
                                                             timestamp = doc.getLong("timestamp") ?: 0L
                                                         )
-                                                    } ?: listOf()
+                                                    }
                                                 }
-
-
+                                                .addOnFailureListener { e ->
+                                                    Log.e("HustlerDashboard", "Error loading reviews: ${e.message}")
+                                                }
                                         }
                                     }
                                 }
@@ -541,7 +519,7 @@ fun HustlerDashboard(
                                                     horizontalArrangement = Arrangement.SpaceBetween,
                                                     modifier = Modifier.fillMaxWidth()
                                                 ) {
-                                                    Text(review.userName, color = Color.Black, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                                    Text(review.userName, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                                                     StarRating(
                                                         rating = review.rating.toFloat(), // FIXED: Convert Int to Float
                                                         onRatingChange = {},
@@ -555,7 +533,7 @@ fun HustlerDashboard(
                                                 // Comment
                                                 Text(
                                                     review.comment,
-                                                    color = Color.Black,
+                                                    color = Color.White.copy(alpha = 0.8f),
                                                     fontSize = 12.sp,
                                                     maxLines = 2,
                                                     overflow = TextOverflow.Ellipsis
@@ -759,7 +737,7 @@ fun HustlerDashboard(
             }
         }
     }
-}
+
 
 @Composable
 fun StarRating(
