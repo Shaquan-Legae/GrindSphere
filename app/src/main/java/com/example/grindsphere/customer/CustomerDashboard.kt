@@ -1,5 +1,8 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package com.example.grindsphere.customer
 
+import android.content.Context
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -7,10 +10,12 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -264,104 +269,6 @@ fun ServicesScreen(navController: NavHostController) {
     }
 }
 
-@Composable
-fun ServiceCard(service: Service, onClick: () -> Unit = {}) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
-        shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        Column {
-            if (service.images.isNotEmpty()) {
-                Image(
-                    painter = rememberAsyncImagePainter(service.images.first()),
-                    contentDescription = "Service image for ${service.name}",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp)
-                        .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp)
-                        .background(Color.LightGray.copy(alpha = 0.5f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Image,
-                        contentDescription = "No image available",
-                        tint = Color.Gray,
-                        modifier = Modifier.size(48.dp)
-                    )
-                }
-            }
-
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = service.name,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = service.description,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "R${String.format(Locale.US, "%.2f", service.price)}",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Star,
-                            contentDescription = "Rating",
-                            tint = Color(0xFFFFD700),
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = String.format(Locale.US, "%.1f", service.rating),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = service.location,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Button(
-                        onClick = { /* Navigate to service details */ },
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text(" Tap to View Details")
-                    }
-                }
-            }
-        }
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -646,6 +553,81 @@ fun CustomerProfileScreen(navController: NavHostController) {
         }
     }
 }
+
+
+/*@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RecentItemsAndSuggestions() {
+    val context = LocalContext.current
+
+    // Suggestions list
+    val suggestions = listOf("Snap My Grad", "ClawsBySihle", "DJ T-HYPE", "Hairtyslists")
+
+    // Load recent items from SharedPreferences
+    val sharedPref = context.getSharedPreferences("recent_items", Context.MODE_PRIVATE)
+    val recentItemsInitial = sharedPref.getStringSet("items", emptySet())?.toList() ?: emptyList()
+    var recentItems by remember { mutableStateOf(recentItemsInitial) }
+
+    var text by remember { mutableStateOf("") }
+    var expanded by remember { mutableStateOf(false) }
+
+    val dropdownItems = (recentItems + suggestions).distinct()
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        // Recently visited items row
+        if (recentItems.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                recentItems.forEach { item ->
+                    Button(onClick = { text = item }) {
+                        Text(item)
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // suggestions
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = !expanded }
+        ) {
+            TextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text("Search items") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                colors = ExposedDropdownMenuDefaults.textFieldColors()
+            )
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                dropdownItems.filter { it.contains(text, ignoreCase = true) || text.isEmpty() }
+                    .forEach { selectionOption ->
+                        DropdownMenuItem(
+                            text = { Text(selectionOption) },
+                            onClick = {
+                                text = selectionOption
+                                expanded = false
+
+                                // Saves to recent items
+                                val updatedSet = (recentItems + selectionOption).toSet()
+                                recentItems = updatedSet.toList()
+                                sharedPref.edit().putStringSet("items", updatedSet).apply()
+                            }
+                        )
+                    }
+            }
+        }
+    }
+}
+*
+ */
 
 // Preview functions
 @Preview(showBackground = true)
