@@ -1,6 +1,11 @@
 package com.example.grindsphere.hustler
 
+
+import android.R.attr.rating
+import java.io.Serializable
+
 // Add this to a new file or existing data class file
+
 data class Review(
     val id: String = "",
     val serviceId: String = "",
@@ -10,3 +15,7 @@ data class Review(
     val comment: String = "",
     val timestamp: Long = System.currentTimeMillis()
 )
+
+
+
+

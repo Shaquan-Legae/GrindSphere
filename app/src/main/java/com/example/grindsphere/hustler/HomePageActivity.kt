@@ -251,7 +251,8 @@ fun HomePageScreen(
         }
 
         item {
-            val popularCategories = listOf("Tutoring", "Beauty", "Food", "Fitness", "Design", "Tech")
+            val popularCategories =
+                listOf("Tutoring", "Beauty", "Food", "Fitness", "Design", "Tech")
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(horizontal = 24.dp),
@@ -401,21 +402,29 @@ fun HomePageScreen(
 
         // Call to action button
         item {
-            Button(
-                onClick = {
-                    onNavigateToSearch() // Navigate to search
-                },
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 24.dp, vertical = 16.dp)
-                    .height(50.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFFFD700),
-                    contentColor = Color.Black
-                )
             ) {
-                Text("Explore All Services", fontWeight = FontWeight.Bold)
+                Button(
+                    onClick = {
+                        onNavigateToSearch()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFFD700),
+                        contentColor = Color.Black
+                    )
+                ) {
+                    Text("Explore All Services", fontWeight = FontWeight.Bold)
+                }
+
+                // Add some extra space at the bottom to ensure button is visible
+                Spacer(modifier = Modifier.height(32.dp))
             }
         }
     }
