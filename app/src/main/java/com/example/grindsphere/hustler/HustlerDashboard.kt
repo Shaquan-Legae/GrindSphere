@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ListAlt
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -44,6 +45,7 @@ import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import com.example.grindsphere.LoginActivity
 import com.example.grindsphere.R
+import com.example.grindsphere.models.Booking
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
@@ -53,6 +55,9 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import com.google.firebase.firestore.ktx.toObject
+import java.text.SimpleDateFormat
+import java.util.*
 
 data class HustlerServiceCard(
     val id: String,
@@ -61,8 +66,6 @@ data class HustlerServiceCard(
     val views: Long = 0,
     val categories: List<String> = listOf()
 )
-
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,6 +92,7 @@ fun HustlerDashboard(
     var searchQuery by remember { mutableStateOf("") }
     var showMessagesScreen by remember { mutableStateOf(false) }
     var showFavorites by remember { mutableStateOf(false) }
+    var showBookings by remember { mutableStateOf(false) }
     var selectedCategory by remember { mutableStateOf("") }
     var pendingRequests by remember { mutableStateOf(0) }
 
@@ -247,6 +251,7 @@ fun HustlerDashboard(
                     Text(
                         when {
                             showMessagesScreen -> "Messages"
+                            showBookings -> "Bookings"
                             selectedTab == 3 -> "Home"
                             selectedTab == 2 -> "Search"
                             selectedTab == 1 -> "Messages"
@@ -302,6 +307,7 @@ fun HustlerDashboard(
                         showSearchBar = false
                         showMessagesScreen = false
                         showFavorites = false
+                        showBookings = false
                     },
                     icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
                     label = { Text("Home") }
@@ -313,6 +319,7 @@ fun HustlerDashboard(
                         showSearchBar = true
                         showMessagesScreen = false
                         showFavorites = false
+                        showBookings = false
                     },
                     icon = { Icon(Icons.Default.Search, contentDescription = "Search") },
                     label = { Text("Search") }
@@ -324,9 +331,22 @@ fun HustlerDashboard(
                         showMessagesScreen = true
                         showSearchBar = false
                         showFavorites = false
+                        showBookings = false
                     },
                     icon = { Icon(Icons.Default.MailOutline, contentDescription = "Messages") },
                     label = { Text("Messages") }
+                )
+                NavigationBarItem(
+                    selected = showBookings,
+                    onClick = {
+                        showBookings = true
+                        showSearchBar = false
+                        showMessagesScreen = false
+                        showFavorites = false
+                        selectedTab = -1 // Deselect other tabs
+                    },
+                    icon = { Icon(Icons.AutoMirrored.Filled.ListAlt, contentDescription = "Bookings") },
+                    label = { Text("Bookings") }
                 )
                 NavigationBarItem(
                     selected = selectedTab == 0,
@@ -335,6 +355,7 @@ fun HustlerDashboard(
                         showSearchBar = false
                         showMessagesScreen = false
                         showFavorites = false
+                        showBookings = false
                     },
                     icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
                     label = { Text("Profile") }
@@ -364,6 +385,10 @@ fun HustlerDashboard(
                             context.startActivity(intent)
                         }
                     )
+                }
+
+                showBookings -> {
+                    BookingsScreen()
                 }
 
                 showSearchBar -> {
@@ -860,7 +885,114 @@ fun HustlerDashboard(
     }
 }
 
+@Composable
+fun BookingsScreen() {
+    var bookings by remember { mutableStateOf<List<Booking>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    val firestore = FirebaseFirestore.getInstance()
+    val auth = FirebaseAuth.getInstance()
+    val context = LocalContext.current
 
+    LaunchedEffect(Unit) {
+        val currentUserId = auth.currentUser?.uid
+        if (currentUserId == null) {
+            isLoading = false
+            return@LaunchedEffect
+        }
+        firestore.collection("bookingRequests")
+            .whereEqualTo("hustlerId", currentUserId)
+            .addSnapshotListener { snapshots, e ->
+                if (e != null) {
+                    isLoading = false
+                    return@addSnapshotListener
+                }
+
+                if (snapshots != null) {
+                    bookings = snapshots.documents.mapNotNull { doc ->
+                        doc.toObject<Booking>()?.copy(id = doc.id)
+                    }
+                }
+                isLoading = false
+            }
+    }
+
+    fun updateBookingStatus(bookingId: String, newStatus: String) {
+        firestore.collection("bookingRequests").document(bookingId)
+            .update("status", newStatus)
+            .addOnSuccessListener {
+                Toast.makeText(context, "Booking status updated to $newStatus", Toast.LENGTH_SHORT).show()
+            }
+            .addOnFailureListener {
+                Toast.makeText(context, "Failed to update booking status", Toast.LENGTH_SHORT).show()
+            }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Text("Booking Requests", style = MaterialTheme.typography.headlineSmall, color = Color.White, modifier = Modifier.padding(bottom = 16.dp))
+        if (isLoading) {
+            CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+        } else if (bookings.isEmpty()) {
+            Text("You have no booking requests yet.", color = Color.White, modifier = Modifier.align(Alignment.CenterHorizontally))
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                items(bookings, key = { it.id }) { booking ->
+                    BookingCard(
+                        booking = booking,
+                        onAccept = { updateBookingStatus(booking.id, "accepted") },
+                        onDecline = { updateBookingStatus(booking.id, "declined") }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun BookingCard(booking: Booking, onAccept: () -> Unit, onDecline: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.15f))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(booking.serviceName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("Customer: ${booking.customerName}", style = MaterialTheme.typography.bodyMedium, color = Color.White)
+            booking.timestamp?.let {
+                Text(
+                    "Date: ${SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()).format(it)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White
+                )
+            }
+            Text("Price: R${String.format(Locale.US, "%.2f", booking.price)}", style = MaterialTheme.typography.bodyMedium, color = Color.White)
+            if (booking.message.isNotBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Message: ${booking.message}", style = MaterialTheme.typography.bodySmall, color = Color.LightGray)
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            if (booking.status == "pending") {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Button(onClick = onAccept, modifier = Modifier.weight(1f)) {
+                        Text("Accept")
+                    }
+                    OutlinedButton(onClick = onDecline, modifier = Modifier.weight(1f)) {
+                        Text("Decline")
+                    }
+                }
+            } else {
+                Text("Status: ${booking.status.replaceFirstChar { it.titlecase(Locale.getDefault()) }}", color = Color.White)
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Preview(showBackground = true)

@@ -2,22 +2,20 @@
 
 package com.example.grindsphere.customer
 
-import android.content.Context
-import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ListAlt
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -28,7 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -36,43 +34,20 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import coil.compose.rememberAsyncImagePainter
+import com.example.grindsphere.models.Booking
+import com.example.grindsphere.models.Conversation
+import com.example.grindsphere.models.Message
+import com.example.grindsphere.models.Service
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import java.util.*
-import androidx.compose.material.icons.automirrored.filled.ListAlt
-import androidx.compose.ui.tooling.preview.Preview
+import com.google.firebase.firestore.ktx.toObject
 import java.text.SimpleDateFormat
-
-// Data classes
-data class Service(
-    val id: String = "",
-    val name: String = "",
-    val description: String = "",
-    val location: String = "",
-    val images: List<String> = listOf(),
-    val ownerUid: String = "",
-    val ownerName: String = "",
-    val category: String = "",
-    val price: Double = 0.0,
-    val rating: Double = 0.0
-)
-
-data class BookingRequest(
-    val id: String = "",
-    val serviceId: String = "",
-    val serviceName: String = "",
-    val customerId: String = "",
-    val customerName: String = "",
-    val hustlerId: String = "",
-    val hustlerName: String = "",
-    val status: String = "pending",
-    val date: Date = Date(),
-    val message: String = "",
-    val price: Double = 0.0
-)
+import java.util.*
 
 class CustomerDashboardActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
+    override fun onCreate(savedInstanceState: android.os.Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             CustomerDashboardScreen()
@@ -97,10 +72,19 @@ fun CustomerDashboardScreen() {
         ) {
             composable("services") { ServicesScreen(navController) }
             composable("bookings") { BookingsScreen() }
-            composable("profile") { CustomerProfileScreen(navController) }
+            composable("conversations") { ConversationsScreen(navController) }
+            composable("profile") { CustomerProfileScreen() }
             composable("serviceDetails/{serviceId}") { backStackEntry ->
                 val serviceId = backStackEntry.arguments?.getString("serviceId") ?: ""
                 ServiceDetailsScreen(serviceId = serviceId, navController = navController)
+            }
+            composable("chat/{conversationId}") { backStackEntry ->
+                val conversationId = backStackEntry.arguments?.getString("conversationId")
+                if (conversationId != null) {
+                    ChatScreen(conversationId = conversationId)
+                } else {
+                    // Handle the case where conversationId is null, maybe show an error message
+                }
             }
         }
     }
@@ -125,6 +109,12 @@ fun CustomerBottomNavigation(navController: NavHostController) {
             onClick = { navController.navigate("bookings") }
         )
         NavigationBarItem(
+            icon = { Icon(Icons.Filled.Email, contentDescription = "Messages") },
+            label = { Text("Messages") },
+            selected = currentRoute == "conversations",
+            onClick = { navController.navigate("conversations") }
+        )
+        NavigationBarItem(
             icon = { Icon(Icons.Filled.Person, contentDescription = "Profile") },
             label = { Text("Profile") },
             selected = currentRoute == "profile",
@@ -139,9 +129,11 @@ fun ServicesScreen(navController: NavHostController) {
     var services by remember { mutableStateOf<List<Service>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var selectedCategory by remember { mutableStateOf("All") }
-    val categories = listOf("All", "Home Services", "Beauty", "Tech", "Education", "Other")
     var searchQuery by remember { mutableStateOf("") }
     var searchActive by remember { mutableStateOf(false) }
+
+    // categories shown to the user remain generic
+    val categories = listOf("All", "Home Services", "Beauty", "Tech", "Education", "Other")
 
     val firestore = FirebaseFirestore.getInstance()
 
@@ -150,20 +142,7 @@ fun ServicesScreen(navController: NavHostController) {
             .get()
             .addOnSuccessListener { result ->
                 services = result.documents.mapNotNull { doc ->
-                    val imagesFromFirestore = doc.get("images") as? List<String> ?: emptyList()
-
-                    Service(
-                        id = doc.id,
-                        name = doc.getString("name") ?: "",
-                        description = doc.getString("description") ?: "",
-                        location = doc.getString("location") ?: "",
-                        images = imagesFromFirestore,
-                        ownerUid = doc.getString("ownerUid") ?: "",
-                        ownerName = doc.getString("ownerName") ?: "",
-                        category = doc.getString("category") ?: "Other",
-                        price = doc.getDouble("price") ?: 0.0,
-                        rating = doc.getDouble("rating") ?: 0.0
-                    )
+                    doc.toObject<Service>()?.copy(id = doc.id)
                 }
                 isLoading = false
             }
@@ -200,7 +179,7 @@ fun ServicesScreen(navController: NavHostController) {
                 .padding(horizontal = if (searchActive) 0.dp else 16.dp)
                 .padding(top = 16.dp, bottom = if (searchActive) 0.dp else 16.dp)
         ) {
-            // Search suggestions (can be empty)
+            // Search suggestions slot left empty
         }
 
         if (!searchActive) {
@@ -235,7 +214,7 @@ fun ServicesScreen(navController: NavHostController) {
                         service.name.contains(searchQuery, ignoreCase = true) ||
                         service.description.contains(searchQuery, ignoreCase = true) ||
                         service.location.contains(searchQuery, ignoreCase = true) ||
-                        service.category.contains(searchQuery, ignoreCase = true)
+                        service.categories.joinToString(" ").contains(searchQuery, ignoreCase = true)
                 categoryMatch && searchMatch
             }
 
@@ -258,6 +237,7 @@ fun ServicesScreen(navController: NavHostController) {
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     items(servicesToDisplay, key = { it.id }) { service ->
+                        // ServiceCard is not edited. It will receive the Service model.
                         ServiceCard(
                             service = service,
                             onClick = { navController.navigate("serviceDetails/${service.id}") }
@@ -269,7 +249,6 @@ fun ServicesScreen(navController: NavHostController) {
     }
 }
 
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ServiceDetailsScreen(
@@ -279,29 +258,18 @@ fun ServiceDetailsScreen(
     var service by remember { mutableStateOf<Service?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var bookingMessage by remember { mutableStateOf("") }
-    var bookingDate by remember { mutableStateOf(Date()) }
     val context = LocalContext.current
+    val auth = FirebaseAuth.getInstance()
+    val firestore = FirebaseFirestore.getInstance()
 
     // Fetch service from Firestore
     LaunchedEffect(serviceId) {
-        val firestore = FirebaseFirestore.getInstance()
         firestore.collection("services")
             .document(serviceId)
             .get()
             .addOnSuccessListener { doc ->
                 if (doc.exists()) {
-                    service = Service(
-                        id = doc.id,
-                        name = doc.getString("name") ?: "",
-                        description = doc.getString("description") ?: "",
-                        location = doc.getString("location") ?: "",
-                        images = doc.get("images") as? List<String> ?: listOf(),
-                        ownerUid = doc.getString("ownerUid") ?: "",
-                        ownerName = doc.getString("ownerName") ?: "",
-                        category = doc.getString("category") ?: "Other",
-                        price = doc.getDouble("price") ?: 0.0,
-                        rating = doc.getDouble("rating") ?: 0.0
-                    )
+                    service = doc.toObject<Service>()?.copy(id = doc.id)
                 }
                 isLoading = false
             }
@@ -319,9 +287,11 @@ fun ServiceDetailsScreen(
         Column(modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)) {
-            if (srv.images.isNotEmpty()) {
+            // Use banner if available, else first image, else placeholder
+            val imageToShow = srv.banner.ifBlank { srv.images.firstOrNull() ?: "" }
+            if (imageToShow.isNotBlank()) {
                 Image(
-                    painter = rememberAsyncImagePainter(srv.images.first()),
+                    painter = rememberAsyncImagePainter(imageToShow),
                     contentDescription = "Service image for ${srv.name}",
                     modifier = Modifier
                         .fillMaxWidth()
@@ -352,20 +322,31 @@ fun ServiceDetailsScreen(
             Text("Category: ${srv.category}", style = MaterialTheme.typography.bodySmall)
             Text("Location: ${srv.location}", style = MaterialTheme.typography.bodySmall)
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Provider: ${srv.ownerName}", style = MaterialTheme.typography.bodySmall)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Price: R${String.format(Locale.US, "%.2f", srv.price)}", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.Star,
-                    contentDescription = "Rating",
-                    tint = Color(0xFFFFD700),
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(String.format(Locale.US, "%.1f", srv.rating), style = MaterialTheme.typography.bodyMedium)
+            // Provider display only if present in document
+            if (srv.ownerName.isNotBlank()) {
+                Text("Provider: ${srv.ownerName}", style = MaterialTheme.typography.bodySmall)
+                Spacer(modifier = Modifier.height(8.dp))
             }
+            // Price only show when present (> 0.0)
+            if (srv.price > 0.0) {
+                Text("Price: R${String.format(Locale.US, "%.2f", srv.price)}", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+            // Rating only show when present (> 0.0)
+            if (srv.rating > 0.0) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = "Rating",
+                        tint = Color(0xFFFFD700),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(String.format(Locale.US, "%.1f", srv.rating), style = MaterialTheme.typography.bodyMedium)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
 
             // Booking Form
@@ -376,37 +357,78 @@ fun ServiceDetailsScreen(
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(8.dp))
-            Button(
-                onClick = {
-                    val auth = FirebaseAuth.getInstance()
-                    val customerId = auth.currentUser?.uid ?: return@Button
-                    val booking = hashMapOf(
-                        "serviceId" to srv.id,
-                        "serviceName" to srv.name,
-                        "customerId" to customerId,
-                        "customerName" to (auth.currentUser?.displayName ?: ""),
-                        "hustlerId" to srv.ownerUid,
-                        "hustlerName" to srv.ownerName,
-                        "status" to "pending",
-                        "date" to bookingDate,
-                        "message" to bookingMessage,
-                        "price" to srv.price
-                    )
-                    FirebaseFirestore.getInstance()
-                        .collection("bookingRequests")
-                        .add(booking)
-                        .addOnSuccessListener {
-                            Toast.makeText(context, "Booking requested!", Toast.LENGTH_SHORT).show()
-                            navController.navigate("bookings")
-                        }
-                        .addOnFailureListener {
-                            Toast.makeText(context, "Failed to book.", Toast.LENGTH_SHORT).show()
-                        }
-                },
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.fillMaxWidth()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("Book Now")
+                Button(
+                    onClick = {
+                        val customerId = auth.currentUser?.uid ?: return@Button
+                        val booking = Booking(
+                            serviceId = srv.id,
+                            serviceName = srv.name,
+                            customerId = customerId,
+                            customerName = auth.currentUser?.displayName ?: "",
+                            hustlerId = srv.ownerUid,
+                            hustlerName = srv.ownerName,
+                            message = bookingMessage,
+                            price = srv.price
+                        )
+                        firestore.collection("bookingRequests")
+                            .add(booking)
+                            .addOnSuccessListener {
+                                Toast.makeText(context, "Booking requested!", Toast.LENGTH_SHORT).show()
+                                navController.navigate("bookings")
+                            }
+                            .addOnFailureListener {
+                                Toast.makeText(context, "Failed to book.", Toast.LENGTH_SHORT).show()
+                            }
+                    },
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Book Now")
+                }
+                OutlinedButton(
+                    onClick = {
+                        val currentUserId = auth.currentUser?.uid
+                        if (currentUserId == null || srv.ownerUid.isEmpty()) return@OutlinedButton
+
+                        // Check for existing conversation
+                        firestore.collection("conversations")
+                            .whereEqualTo("serviceId", srv.id)
+                            .whereArrayContains("participants", currentUserId)
+                            .get()
+                            .addOnSuccessListener { querySnapshot ->
+                                if (!querySnapshot.isEmpty) {
+                                    // Conversation exists
+                                    val conversationId = querySnapshot.documents.first().id
+                                    navController.navigate("chat/$conversationId")
+                                } else {
+                                    // Create new conversation
+                                    val newConversation = Conversation(
+                                        participants = listOf(currentUserId, srv.ownerUid),
+                                        participantNames = mapOf(
+                                            currentUserId to (auth.currentUser?.displayName ?: "Customer"),
+                                            srv.ownerUid to srv.ownerName
+                                        ),
+                                        serviceId = srv.id,
+                                        serviceName = srv.name,
+                                        lastMessage = "Chat started..."
+                                    )
+                                    firestore.collection("conversations")
+                                        .add(newConversation)
+                                        .addOnSuccessListener { docRef ->
+                                            navController.navigate("chat/${docRef.id}")
+                                        }
+                                }
+                            }
+                    },
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Message")
+                }
             }
         }
     } ?: Box(
@@ -419,7 +441,7 @@ fun ServiceDetailsScreen(
 
 @Composable
 fun BookingsScreen() {
-    var bookings by remember { mutableStateOf<List<BookingRequest>>(emptyList()) }
+    var bookings by remember { mutableStateOf<List<Booking>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     val firestore = FirebaseFirestore.getInstance()
     val auth = FirebaseAuth.getInstance()
@@ -434,19 +456,7 @@ fun BookingsScreen() {
             .get()
             .addOnSuccessListener { result ->
                 bookings = result.documents.mapNotNull { doc ->
-                    BookingRequest(
-                        id = doc.id,
-                        serviceId = doc.getString("serviceId") ?: "",
-                        serviceName = doc.getString("serviceName") ?: "",
-                        customerId = doc.getString("customerId") ?: "",
-                        customerName = doc.getString("customerName") ?: "",
-                        hustlerId = doc.getString("hustlerId") ?: "",
-                        hustlerName = doc.getString("hustlerName") ?: "",
-                        status = doc.getString("status") ?: "pending",
-                        date = doc.getDate("date") ?: Date(),
-                        message = doc.getString("message") ?: "",
-                        price = doc.getDouble("price") ?: 0.0
-                    )
+                    doc.toObject<Booking>()?.copy(id = doc.id)
                 }
                 isLoading = false
             }
@@ -478,7 +488,7 @@ fun BookingsScreen() {
 }
 
 @Composable
-fun BookingCard(booking: BookingRequest) {
+fun BookingCard(booking: Booking) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -495,10 +505,12 @@ fun BookingCard(booking: BookingRequest) {
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text("Provider: ${booking.hustlerName}", style = MaterialTheme.typography.bodyMedium)
-            Text(
-                "Date: ${SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()).format(booking.date)}",
-                style = MaterialTheme.typography.bodyMedium
-            )
+            booking.timestamp?.let {
+                Text(
+                    "Date: ${SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()).format(it)}",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
             Text("Price: R${String.format(Locale.US, "%.2f", booking.price)}", style = MaterialTheme.typography.bodyMedium)
             if (booking.message.isNotBlank()) {
                 Spacer(modifier = Modifier.height(4.dp))
@@ -534,7 +546,7 @@ fun StatusBadge(status: String) {
 }
 
 @Composable
-fun CustomerProfileScreen(navController: NavHostController) {
+fun CustomerProfileScreen() {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -554,82 +566,157 @@ fun CustomerProfileScreen(navController: NavHostController) {
     }
 }
 
-
-/*@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RecentItemsAndSuggestions() {
-    val context = LocalContext.current
-
-    // Suggestions list
-    val suggestions = listOf("Snap My Grad", "ClawsBySihle", "DJ T-HYPE", "Hairtyslists")
-
-    // Load recent items from SharedPreferences
-    val sharedPref = context.getSharedPreferences("recent_items", Context.MODE_PRIVATE)
-    val recentItemsInitial = sharedPref.getStringSet("items", emptySet())?.toList() ?: emptyList()
-    var recentItems by remember { mutableStateOf(recentItemsInitial) }
-
-    var text by remember { mutableStateOf("") }
-    var expanded by remember { mutableStateOf(false) }
-
-    val dropdownItems = (recentItems + suggestions).distinct()
-
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        // Recently visited items row
-        if (recentItems.isNotEmpty()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                recentItems.forEach { item ->
-                    Button(onClick = { text = item }) {
-                        Text(item)
-                    }
+fun ServiceCard(
+    service: Service,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column {
+            // Banner image
+            if (service.banner.isNotBlank()) {
+                Image(
+                    painter = rememberAsyncImagePainter(service.banner),
+                    contentDescription = "Banner for ${service.name}",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(160.dp)
+                        .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(160.dp)
+                        .background(Color.LightGray.copy(alpha = 0.3f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Image,
+                        contentDescription = "No banner",
+                        tint = Color.Gray,
+                        modifier = Modifier.size(48.dp)
+                    )
                 }
             }
-            Spacer(modifier = Modifier.height(16.dp))
-        }
 
-        // suggestions
-        ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = { expanded = !expanded }
-        ) {
-            TextField(
-                value = text,
-                onValueChange = { text = it },
-                label = { Text("Search items") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                colors = ExposedDropdownMenuDefaults.textFieldColors()
-            )
-            ExposedDropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false }
-            ) {
-                dropdownItems.filter { it.contains(text, ignoreCase = true) || text.isEmpty() }
-                    .forEach { selectionOption ->
-                        DropdownMenuItem(
-                            text = { Text(selectionOption) },
-                            onClick = {
-                                text = selectionOption
-                                expanded = false
-
-                                // Saves to recent items
-                                val updatedSet = (recentItems + selectionOption).toSet()
-                                recentItems = updatedSet.toList()
-                                sharedPref.edit().putStringSet("items", updatedSet).apply()
-                            }
+            Column(modifier = Modifier.padding(12.dp)) {
+                // Profile pic and service info
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (service.profilePicUrl.isNotBlank()) {
+                        Image(
+                            painter = rememberAsyncImagePainter(service.profilePicUrl),
+                            contentDescription = "Provider profile picture",
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(50)),
+                            contentScale = ContentScale.Crop
                         )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(Color.Gray.copy(alpha = 0.4f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = "No profile pic",
+                                tint = Color.DarkGray,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
                     }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            service.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        if (service.ownerName.isNotBlank()) {
+                            Text(
+                                text = "by ${service.ownerName}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Short description
+                Text(
+                    text = service.description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Location, price, rating, bookings
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column {
+                        if (service.location.isNotBlank()) {
+                            Text(
+                                "📍 ${service.location}",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        if (service.price > 0.0) {
+                            Text(
+                                "R${String.format(Locale.US, "%.2f", service.price)}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        if (service.rating > 0.0) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Star,
+                                    contentDescription = "Rating",
+                                    tint = Color(0xFFFFD700),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    String.format(Locale.US, "%.1f", service.rating),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
+                        if (service.bookings > 0) {
+                            Text(
+                                "${service.bookings} bookings",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 }
-*
- */
 
-// Preview functions
+
+// Previews updated to match new Service model
 @Preview(showBackground = true)
 @Composable
 fun ServicesScreenPreview() {
@@ -645,8 +732,13 @@ fun ServiceCardPreview() {
         description = "This is a sample service description that might be a bit longer to test text truncation",
         location = "New York, NY",
         images = listOf(),
+        banner = "",
+        profilePicUrl = "",
         ownerUid = "123",
         ownerName = "John Doe",
+        categories = listOf("Tutoring"),
+        bookings = 2L,
+        views = 10L,
         category = "Home Services",
         price = 49.99,
         rating = 4.5
@@ -657,7 +749,7 @@ fun ServiceCardPreview() {
 @Preview(showBackground = true)
 @Composable
 fun BookingCardPreview() {
-    val sampleBooking = BookingRequest(
+    val sampleBooking = Booking(
         id = "1",
         serviceId = "123",
         serviceName = "Sample Service",
@@ -666,7 +758,7 @@ fun BookingCardPreview() {
         hustlerId = "789",
         hustlerName = "Provider Name",
         status = "pending",
-        date = Date(),
+        timestamp = Date(),
         message = "Please arrive by 2 PM",
         price = 49.99
     )
@@ -682,5 +774,183 @@ fun StatusBadgePreview() {
         StatusBadge(status = "rejected")
         StatusBadge(status = "completed")
         StatusBadge(status = "unknown")
+    }
+}
+
+@Composable
+fun ConversationsScreen(navController: NavHostController) {
+    var conversations by remember { mutableStateOf<List<Conversation>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    val auth = FirebaseAuth.getInstance()
+    val firestore = FirebaseFirestore.getInstance()
+
+    LaunchedEffect(Unit) {
+        val currentUserId = auth.currentUser?.uid ?: return@LaunchedEffect
+        firestore.collection("conversations")
+            .whereArrayContains("participants", currentUserId)
+            .addSnapshotListener { snapshots, e ->
+                if (e != null) {
+                    isLoading = false
+                    return@addSnapshotListener
+                }
+
+                if (snapshots != null) {
+                    conversations = snapshots.documents.mapNotNull { doc ->
+                        doc.toObject<Conversation>()?.copy(id = doc.id)
+                    }
+                }
+                isLoading = false
+            }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Text("Messages", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(bottom = 16.dp))
+        if (isLoading) {
+            CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+        } else if (conversations.isEmpty()) {
+            Text("No conversations yet.", modifier = Modifier.align(Alignment.CenterHorizontally))
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(conversations, key = { it.id }) { conversation ->
+                    ConversationCard(conversation = conversation, navController = navController)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ConversationCard(conversation: Conversation, navController: NavHostController) {
+    val auth = FirebaseAuth.getInstance()
+    val currentUserId = auth.currentUser?.uid
+    val otherParticipantId = conversation.participants.find { it != currentUserId }
+    val otherParticipantName = conversation.participantNames[otherParticipantId] ?: "Unknown"
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { navController.navigate("chat/${conversation.id}") },
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(otherParticipantName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(conversation.serviceName, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                conversation.lastMessage,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+fun ChatScreen(conversationId: String) {
+    var messages by remember { mutableStateOf<List<Message>>(emptyList()) }
+    var newMessageText by remember { mutableStateOf("") }
+    val auth = FirebaseAuth.getInstance()
+    val firestore = FirebaseFirestore.getInstance()
+    val currentUserId = auth.currentUser?.uid
+
+    LaunchedEffect(conversationId) {
+        firestore.collection("conversations").document(conversationId)
+            .collection("messages").orderBy("timestamp")
+            .addSnapshotListener { snapshots, e ->
+                if (e != null) {
+                    return@addSnapshotListener
+                }
+                if (snapshots != null) {
+                    messages = snapshots.documents.mapNotNull { doc ->
+                        doc.toObject<Message>()?.copy(id = doc.id)
+                    }
+                }
+            }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier
+                .weight(1f)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            reverseLayout = true
+        ) {
+            items(messages.reversed(), key = { it.id }) { message ->
+                MessageBubble(message = message, isFromCurrentUser = message.senderId == currentUserId)
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = newMessageText,
+                onValueChange = { newMessageText = it },
+                label = { Text("Type a message") },
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Button(onClick = {
+                if (newMessageText.isNotBlank() && currentUserId != null) {
+                    val message = Message(
+                        conversationId = conversationId,
+                        senderId = currentUserId,
+                        senderName = auth.currentUser?.displayName ?: "Customer",
+                        text = newMessageText,
+                        timestamp = Timestamp.now()
+                    )
+                    firestore.collection("conversations").document(conversationId)
+                        .collection("messages").add(message)
+                    firestore.collection("conversations").document(conversationId)
+                        .update(mapOf(
+                            "lastMessage" to newMessageText,
+                            "lastMessageTimestamp" to FieldValue.serverTimestamp()
+                        ))
+                    newMessageText = ""
+                }
+            }) {
+                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+            }
+        }
+    }
+}
+
+@Composable
+fun MessageBubble(message: Message, isFromCurrentUser: Boolean) {
+    val bubbleColor = if (isFromCurrentUser) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else Color.LightGray.copy(alpha = 0.3f)
+    val alignment = if (isFromCurrentUser) Arrangement.End else Arrangement.Start
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = alignment
+    ) {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(bubbleColor)
+                .padding(12.dp)
+        ) {
+            Column {
+                Text(
+                    text = message.text,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(message.timestamp.toDate()),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray
+                )
+            }
+        }
     }
 }

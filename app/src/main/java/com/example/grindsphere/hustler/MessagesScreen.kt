@@ -1,6 +1,5 @@
 package com.example.grindsphere.hustler
 
-import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -10,7 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -24,12 +23,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.grindsphere.models.Booking
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.ktx.toObject
 import java.text.SimpleDateFormat
 import java.util.*
-
 
 // Conversation data class
 data class Conversation(
@@ -39,7 +39,6 @@ data class Conversation(
     val timestamp: Long = 0L,
     val type: String = "chat"
 )
-
 
 @Composable
 fun MessagesScreen(
@@ -51,8 +50,8 @@ fun MessagesScreen(
     val firestore = FirebaseFirestore.getInstance()
     val currentUser = auth.currentUser
 
-    var conversations by remember { mutableStateOf(listOf<Conversation>()) }
-    var bookingRequests by remember { mutableStateOf(listOf<BookingRequest>()) }
+    var conversations by remember { mutableStateOf<List<Conversation>>(emptyList()) }
+    var bookingRequests by remember { mutableStateOf<List<Booking>>(emptyList()) }
     var showBookingRequests by remember { mutableStateOf(true) }
 
     // Load conversations
@@ -67,38 +66,22 @@ fun MessagesScreen(
                         return@addSnapshotListener
                     }
 
-                    val convos = snapshot?.documents?.map { doc ->
-                        Conversation(
-                            id = doc.id,
-                            participants = doc.get("participants") as? List<String> ?: emptyList(),
-                            lastMessage = doc.getString("lastMessage") ?: "",
-                            timestamp = doc.getLong("timestamp") ?: 0L,
-                            type = doc.getString("type") ?: "chat"
-                        )
+                    val convos = snapshot?.documents?.mapNotNull { doc ->
+                        doc.toObject<Conversation>()?.copy(id = doc.id)
                     } ?: emptyList()
                     conversations = convos
                 }
 
             // Load booking requests
             firestore.collection("bookingRequests")
-                .whereEqualTo("hustlerUid", uid)
+                .whereEqualTo("hustlerId", uid)
                 .whereEqualTo("status", "pending")
                 .orderBy("timestamp", Query.Direction.DESCENDING)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) return@addSnapshotListener
 
-                    val requests = snapshot?.documents?.map { doc ->
-                        BookingRequest(
-                            id = doc.id,
-                            serviceId = doc.getString("serviceId") ?: "",
-                            serviceName = doc.getString("serviceName") ?: "",
-                            customerUid = doc.getString("customerUid") ?: "",
-                            customerName = doc.getString("customerName") ?: "",
-                            hustlerUid = doc.getString("hustlerUid") ?: "",
-                            status = doc.getString("status") ?: "pending",
-                            timestamp = doc.getLong("timestamp") ?: 0L,
-                            message = doc.getString("message") ?: ""
-                        )
+                    val requests = snapshot?.documents?.mapNotNull { doc ->
+                        doc.toObject<Booking>()?.copy(id = doc.id)
                     } ?: emptyList()
                     bookingRequests = requests
                 }
@@ -151,9 +134,9 @@ fun MessagesScreen(
                                 createOrFindConversation(
                                     firestore = firestore,
                                     participant1 = uid,
-                                    participant2 = request.customerUid,
+                                    participant2 = request.customerId,
                                     serviceName = request.serviceName,
-                                    onSuccess = { conversationId ->
+                                    onSuccess = {
                                         Toast.makeText(context, "Connection accepted!", Toast.LENGTH_SHORT).show()
                                     }
                                 )
@@ -172,10 +155,10 @@ fun MessagesScreen(
                         createOrFindConversation(
                             firestore = firestore,
                             participant1 = uid,
-                            participant2 = request.customerUid,
+                            participant2 = request.customerId,
                             serviceName = request.serviceName,
                             onSuccess = { conversationId ->
-                                onOpenChat(conversationId, request.customerUid, request.customerName)
+                                onOpenChat(conversationId, request.customerId, request.customerName)
                             }
                         )
                     }
@@ -194,10 +177,10 @@ fun MessagesScreen(
 
 @Composable
 fun BookingRequestsSection(
-    bookingRequests: List<BookingRequest>,
-    onAccept: (BookingRequest) -> Unit,
-    onDecline: (BookingRequest) -> Unit,
-    onChat: (BookingRequest) -> Unit
+    bookingRequests: List<Booking>,
+    onAccept: (Booking) -> Unit,
+    onDecline: (Booking) -> Unit,
+    onChat: (Booking) -> Unit
 ) {
     if (bookingRequests.isEmpty()) {
         EmptyState(
@@ -227,18 +210,16 @@ fun ConversationsSection(
     onOpenChat: (conversationId: String, customerUid: String, customerName: String) -> Unit,
     onStartNewChat: () -> Unit
 ) {
-    val context = LocalContext.current
-    val firestore = FirebaseFirestore.getInstance()
-
     if (conversations.isEmpty()) {
         EmptyState(
-            icon = Icons.Default.Chat,
+            icon = Icons.AutoMirrored.Filled.Chat,
             title = "No messages yet",
             subtitle = "Start a conversation and your messages will appear here",
             actionText = "Start a Conversation",
             onAction = onStartNewChat
         )
     } else {
+        val firestore = FirebaseFirestore.getInstance()
         LazyColumn(modifier = Modifier.padding(16.dp)) {
             items(conversations) { conversation ->
                 val otherParticipantId = conversation.participants.find { it != currentUserId } ?: ""
@@ -311,7 +292,7 @@ fun EmptyState(
 
 @Composable
 fun BookingRequestItem(
-    request: BookingRequest,
+    request: Booking,
     onAccept: () -> Unit,
     onDecline: () -> Unit,
     onChat: () -> Unit
@@ -347,11 +328,13 @@ fun BookingRequestItem(
                         fontSize = 12.sp,
                         maxLines = 2
                     )
-                    Text(
-                        "Received: ${formatDate(request.timestamp)}",
-                        color = Color.White.copy(alpha = 0.6f),
-                        fontSize = 10.sp
-                    )
+                    request.timestamp?.let {
+                        Text(
+                            "Received: ${formatDate(it.time)}",
+                            color = Color.White.copy(alpha = 0.6f),
+                            fontSize = 10.sp
+                        )
+                    }
                 }
 
                 // Action buttons
@@ -361,7 +344,7 @@ fun BookingRequestItem(
                         modifier = Modifier.size(40.dp)
                     ) {
                         Icon(
-                            Icons.Default.Chat,
+                            Icons.AutoMirrored.Filled.Chat,
                             contentDescription = "Accept",
                             tint = Color.Green
                         )
