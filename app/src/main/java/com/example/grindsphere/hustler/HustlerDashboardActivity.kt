@@ -10,11 +10,9 @@ class HustlerDashboardActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            GrindSphereTheme() {
+            GrindSphereTheme {
                 HustlerDashboard(viewModel = viewModel())
             }
         }
     }
 }
-
-

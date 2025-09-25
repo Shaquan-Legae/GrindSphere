@@ -35,9 +35,11 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 class ServiceDetailActivity : ComponentActivity() {
@@ -122,7 +124,7 @@ fun ServiceDetailScreen(serviceId: String?) {
                             serviceId = doc.getString("serviceId") ?: "",
                             userId = doc.getString("userId") ?: "",
                             userName = doc.getString("userName") ?: "",
-                            rating = (doc.getLong("rating") ?: 0.0).toInt(),
+                            rating = (doc.getLong("rating") ?: 0L).toInt(),
                             comment = doc.getString("comment") ?: "",
                             timestamp = doc.getLong("timestamp") ?: 0L
                         )
@@ -273,13 +275,13 @@ fun ServiceDetailScreen(serviceId: String?) {
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Rating and Reviews
+                // Rating and Reviews - FIXED: Convert averageRating to Int
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(vertical = 4.dp)
                 ) {
                     StarRating(
-                        rating = averageRating,
+                        rating = averageRating.roundToInt(),
                         onRatingChange = {},
                         interactive = false,
                         starSize = 16.dp
@@ -402,11 +404,12 @@ fun ServiceDetailScreen(serviceId: String?) {
                     .padding(horizontal = 16.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7F5A83))
             ) {
-                Text("Add Review", color = Color.White) // keep button text white
+                Text("Add Review")
             }
 
-            Spacer(modifier = Modifier.height(16.dp)) // Reviews List
+            Spacer(modifier = Modifier.height(16.dp))
 
+            // Reviews List
             if (reviews.isEmpty()) {
                 Text(
                     text = "No reviews yet. Be the first to review!",
@@ -418,56 +421,14 @@ fun ServiceDetailScreen(serviceId: String?) {
                 )
             } else {
                 Column(
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp)
+                    modifier = Modifier.padding(horizontal = 16.dp)
                 ) {
                     reviews.forEach { review ->
-                        // Wrap each review in a white Card
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White) // White background
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                // User name and rating
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text(
-                                        review.userName,
-                                        color = Color.Black, // black text for username
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 14.sp
-                                    )
-                                    StarRating(
-                                        rating = review.rating,
-                                        onRatingChange = {},
-                                        interactive = false,
-                                        starSize = 16.dp
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.height(8.dp))
-
-                                // Review comment
-                                Text(
-                                    review.comment,
-                                    color = Color.Black, // black text for comment
-                                    fontSize = 12.sp
-                                )
-
-                                Spacer(modifier = Modifier.height(4.dp))
-
-                            }
-                        }
-
+                        ReviewItem(review = review)
                         Spacer(modifier = Modifier.height(12.dp))
                     }
                 }
             }
-
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -480,13 +441,55 @@ fun ServiceDetailScreen(serviceId: String?) {
             ) {
                 Button(
                     onClick = {
-                        // Book Now logic
-                        Toast.makeText(context, "Booking request sent!", Toast.LENGTH_SHORT).show()
+                        // Create booking request
+                        val currentUser = auth.currentUser
+                        if (serviceId != null && currentUser != null) {
+                            // Get customer name from Firestore
+                            firestore.collection("users").document(currentUser.uid).get()
+                                .addOnSuccessListener { userDoc ->
+                                    val customerName = userDoc.getString("name") ?: "Customer"
+
+                                    val bookingData = hashMapOf(
+                                        "serviceId" to serviceId,
+                                        "serviceName" to serviceName,
+                                        "customerUid" to currentUser.uid,
+                                        "customerName" to customerName,
+                                        "hustlerUid" to ownerUid,
+                                        "status" to "pending",
+                                        "timestamp" to System.currentTimeMillis(),
+                                        "message" to "I'm interested in your service!"
+                                    )
+
+                                    firestore.collection("bookingRequests").add(bookingData)
+                                        .addOnSuccessListener { docRef ->
+                                            Toast.makeText(context, "Connection request sent!", Toast.LENGTH_SHORT).show()
+
+                                            // Also create a conversation for messaging
+                                            val convoData = hashMapOf(
+                                                "participants" to listOf(currentUser.uid, ownerUid),
+                                                "timestamp" to System.currentTimeMillis(),
+                                                "lastMessage" to "Connection request: $serviceName",
+                                                "type" to "booking",
+                                                "bookingId" to docRef.id,
+                                                "serviceId" to serviceId
+                                            )
+                                            firestore.collection("conversations").add(convoData)
+                                                .addOnSuccessListener { convoDoc ->
+                                                    Toast.makeText(context, "You can now chat with the service provider", Toast.LENGTH_SHORT).show()
+                                                }
+                                        }
+                                        .addOnFailureListener { e ->
+                                            Toast.makeText(context, "Failed to send request: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                }
+                        } else {
+                            Toast.makeText(context, "Please log in to connect", Toast.LENGTH_SHORT).show()
+                        }
                     },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7F5A83))
                 ) {
-                    Text("Book Now")
+                    Text("Connect")
                 }
 
                 // Favorite Button with Star Icon
@@ -538,11 +541,11 @@ fun ServiceDetailScreen(serviceId: String?) {
             title = { Text("Add Review") },
             text = {
                 Column {
-                    // Star Rating
+                    // Star Rating - FIXED: Convert Float to Int and back
                     Text("Rating:", modifier = Modifier.padding(bottom = 8.dp))
                     StarRating(
-                        rating = userRating,
-                        onRatingChange = { userRating = it }
+                        rating = userRating.roundToInt(),
+                        onRatingChange = { userRating = it.toFloat() }
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -572,7 +575,7 @@ fun ServiceDetailScreen(serviceId: String?) {
                                             "serviceId" to serviceId,
                                             "userId" to currentUser.uid,
                                             "userName" to userName,
-                                            "rating" to userRating.toLong(),
+                                            "rating" to userRating.toInt(),
                                             "comment" to userComment,
                                             "timestamp" to System.currentTimeMillis()
                                         )
@@ -628,7 +631,7 @@ fun ReviewItem(review: Review) {
                 )
 
                 StarRating(
-                    rating = review.rating.toFloat(),
+                    rating = review.rating,
                     onRatingChange = {},
                     interactive = false,
                     starSize = 16.dp

@@ -48,7 +48,11 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
 import java.util.UUID
-import com.example.grindsphere.hustler.Review
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 
 data class HustlerServiceCard(
     val id: String,
@@ -57,6 +61,8 @@ data class HustlerServiceCard(
     val views: Long = 0,
     val categories: List<String> = listOf()
 )
+
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -84,6 +90,7 @@ fun HustlerDashboard(
     var showMessagesScreen by remember { mutableStateOf(false) }
     var showFavorites by remember { mutableStateOf(false) }
     var selectedCategory by remember { mutableStateOf("") }
+    var pendingRequests by remember { mutableStateOf(0) }
 
     LaunchedEffect(viewModelSelectedCategory) {
         selectedCategory = viewModelSelectedCategory
@@ -101,12 +108,25 @@ fun HustlerDashboard(
         "Fashion", "Food", "Music", "Fitness", "Transport", "Nails", "Hair", "Beauty", "Cake", "DJ"
     )
 
+    // Load pending requests count
+    LaunchedEffect(currentUser?.uid) {
+        currentUser?.uid?.let { uid ->
+            firestore.collection("bookingRequests")
+                .whereEqualTo("hustlerUid", uid)
+                .whereEqualTo("status", "pending")
+                .addSnapshotListener { snapshot, error ->
+                    pendingRequests = snapshot?.size() ?: 0
+                }
+        }
+    }
+
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
             val storageRef = storage.reference
-            val imageRef = storageRef.child("profile_images/${currentUser?.uid}/${UUID.randomUUID()}")
+            val imageRef =
+                storageRef.child("profile_images/${currentUser?.uid}/${UUID.randomUUID()}")
 
             imageRef.putFile(uri)
                 .addOnSuccessListener {
@@ -116,7 +136,11 @@ fun HustlerDashboard(
                                 .update("profilePicUrl", downloadUri.toString())
                                 .addOnSuccessListener {
                                     profilePicUrl = downloadUri.toString()
-                                    Toast.makeText(context, "Profile picture updated!", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(
+                                        context,
+                                        "Profile picture updated!",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
                                 }
                         }
                     }
@@ -140,7 +164,8 @@ fun HustlerDashboard(
                 .whereEqualTo("ownerUid", uid)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
-                        Toast.makeText(context, "Error: ${error.message}", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Error: ${error.message}", Toast.LENGTH_SHORT)
+                            .show()
                         return@addSnapshotListener
                     }
                     val list = snapshot?.documents?.map { doc ->
@@ -163,7 +188,11 @@ fun HustlerDashboard(
         firestore.collection("services")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    Toast.makeText(context, "Error loading services: ${error.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        context,
+                        "Error loading services: ${error.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
                     return@addSnapshotListener
                 }
 
@@ -233,12 +262,20 @@ fun HustlerDashboard(
                             onClick = { showFavorites = true },
                             modifier = Modifier.padding(end = 8.dp)
                         ) {
-                            Icon(Icons.Default.Star, contentDescription = "Favorites", tint = Color(0xFFFFD700))
+                            Icon(
+                                Icons.Default.Star,
+                                contentDescription = "Favorites",
+                                tint = Color(0xFFFFD700)
+                            )
                         }
                     }
 
                     IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Menu", tint = Color.White)
+                        Icon(
+                            Icons.Default.MoreVert,
+                            contentDescription = "Menu",
+                            tint = Color.White
+                        )
                     }
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                         DropdownMenuItem(
@@ -251,7 +288,9 @@ fun HustlerDashboard(
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color(0xFF0D324D)
+                )
             )
         },
         bottomBar = {
@@ -283,6 +322,7 @@ fun HustlerDashboard(
                     onClick = {
                         selectedTab = 1
                         showMessagesScreen = true
+                        showSearchBar = false
                         showFavorites = false
                     },
                     icon = { Icon(Icons.Default.MailOutline, contentDescription = "Messages") },
@@ -305,15 +345,18 @@ fun HustlerDashboard(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues) // THIS IS CRUCIAL - apply the scaffold padding
-                .background(Brush.verticalGradient(listOf(Color(0xFF0D324D), Color(0xFF7F5A83)))))
+                .padding(paddingValues)
+                .background(Brush.verticalGradient(listOf(Color(0xFF0D324D), Color(0xFF7F5A83))))
+        ) {
             when {
                 showMessagesScreen -> {
                     MessagesScreen(
-                        onOpenChat = { customerUid, customerName ->
-                            val intent = Intent(context, ChatScreenActivity::class.java)
-                            intent.putExtra("customerUid", customerUid)
-                            intent.putExtra("customerName", customerName)
+                        onOpenChat = { conversationId, customerUid, customerName ->
+                            val intent = Intent(context, ChatActivity::class.java).apply {
+                                putExtra("conversationId", conversationId)
+                                putExtra("customerUid", customerUid)
+                                putExtra("customerName", customerName)
+                            }
                             context.startActivity(intent)
                         },
                         onStartNewChat = {
@@ -322,6 +365,23 @@ fun HustlerDashboard(
                         }
                     )
                 }
+
+                showSearchBar -> {
+                    SearchScreen(
+                        allServices = allServices,
+                        searchQuery = searchQuery,
+                        onSearchQueryChange = { searchQuery = it },
+                        selectedCategory = selectedCategory,
+                        onSelectedCategoryChange = { selectedCategory = it },
+                        predefinedCategories = predefinedCategories,
+                        onServiceClick = { serviceId ->
+                            val intent = Intent(context, ServiceDetailActivity::class.java)
+                            intent.putExtra("serviceId", serviceId)
+                            context.startActivity(intent)
+                        }
+                    )
+                }
+
                 selectedTab == 3 -> {
                     HomePageScreen(
                         onNavigateToSearch = {
@@ -331,6 +391,7 @@ fun HustlerDashboard(
                         viewModel = viewModel
                     )
                 }
+
                 showFavorites -> {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(
@@ -339,33 +400,57 @@ fun HustlerDashboard(
                                 .clickable { showFavorites = false }
                                 .padding(bottom = 16.dp)
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to Dashboard", tint = Color.White)
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back to Dashboard",
+                                tint = Color.White
+                            )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Back to Dashboard", color = Color.White, fontSize = 16.sp)
                         }
 
-                        Text("Your Favorites", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(bottom = 16.dp))
+                        Text(
+                            "Your Favorites",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
 
                         if (favoriteServices.isEmpty()) {
-                            Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                                Text("No favorite services yet", color = Color.White.copy(alpha = 0.7f), fontSize = 16.sp)
+                            Box(
+                                modifier = Modifier.fillMaxWidth().padding(32.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    "No favorite services yet",
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    fontSize = 16.sp
+                                )
                             }
                         } else {
                             LazyRow(
                                 horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                modifier = Modifier.height(140.dp) // FIXED HEIGHT
+                                modifier = Modifier.height(140.dp)
                             ) {
                                 items(favoriteServices) { service ->
                                     Card(
                                         modifier = Modifier
                                             .width(120.dp)
                                             .clickable {
-                                                val intent = Intent(context, ServiceDetailActivity::class.java)
+                                                val intent = Intent(
+                                                    context,
+                                                    ServiceDetailActivity::class.java
+                                                )
                                                 intent.putExtra("serviceId", service.id)
                                                 context.startActivity(intent)
                                             },
                                         shape = RoundedCornerShape(16.dp),
-                                        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.1f))
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = Color.White.copy(
+                                                alpha = 0.1f
+                                            )
+                                        )
                                     ) {
                                         Column {
                                             if (service.bannerUrl.isNotEmpty()) {
@@ -384,12 +469,20 @@ fun HustlerDashboard(
                                                         .fillMaxWidth()
                                                         .background(
                                                             Brush.verticalGradient(
-                                                                listOf(Color(0xFF7F5A83), Color(0xFF0D324D))
+                                                                listOf(
+                                                                    Color(0xFF7F5A83),
+                                                                    Color(0xFF0D324D)
+                                                                )
                                                             )
                                                         ),
                                                     contentAlignment = Alignment.Center
                                                 ) {
-                                                    Icon(Icons.Default.Storefront, contentDescription = "Service", tint = Color.White, modifier = Modifier.size(32.dp))
+                                                    Icon(
+                                                        Icons.Default.Storefront,
+                                                        contentDescription = "Service",
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(32.dp)
+                                                    )
                                                 }
                                             }
                                             Text(
@@ -405,7 +498,10 @@ fun HustlerDashboard(
                                                 "${service.views} views",
                                                 color = Color.White.copy(alpha = 0.7f),
                                                 fontSize = 10.sp,
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                modifier = Modifier.padding(
+                                                    horizontal = 8.dp,
+                                                    vertical = 4.dp
+                                                )
                                             )
                                         }
                                     }
@@ -414,18 +510,22 @@ fun HustlerDashboard(
                         }
                     }
                 }
+
                 else -> {
-                    LazyColumn( // CHANGED FROM Column TO LazyColumn
+                    LazyColumn(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(paddingValues)
                             .padding(16.dp)
                     ) {
                         item {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 if (profilePicUrl.isNotEmpty()) {
                                     Image(
-                                        painter = rememberAsyncImagePainter(ImageRequest.Builder(LocalContext.current).data(profilePicUrl).build()),
+                                        painter = rememberAsyncImagePainter(
+                                            ImageRequest.Builder(
+                                                LocalContext.current
+                                            ).data(profilePicUrl).build()
+                                        ),
                                         contentDescription = "Profile Picture",
                                         modifier = Modifier
                                             .size(60.dp)
@@ -443,7 +543,12 @@ fun HustlerDashboard(
                                     )
                                 }
                                 Spacer(modifier = Modifier.width(12.dp))
-                                Text("Welcome back, $hustlerName 👋", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                Text(
+                                    "Welcome back, $hustlerName 👋",
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
                             }
 
                             Spacer(modifier = Modifier.height(24.dp))
@@ -451,53 +556,108 @@ fun HustlerDashboard(
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.15f))
+                                colors = CardDefaults.cardColors(
+                                    containerColor = Color.White.copy(
+                                        alpha = 0.15f
+                                    )
+                                )
                             ) {
-                                Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("Your Stats", color = Color.White, fontWeight = FontWeight.SemiBold)
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        "Your Stats",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
                                     Spacer(modifier = Modifier.height(8.dp))
-                                    Text("Total Views: $totalViews", color = Color.White, fontSize = 16.sp)
-                                    Text("Active Services: ${services.size}", color = Color.White, fontSize = 16.sp)
-                                    Text("Favorites: ${favoriteServices.size}", color = Color.White, fontSize = 16.sp)
+                                    Text(
+                                        "Total Views: $totalViews",
+                                        color = Color.White,
+                                        fontSize = 16.sp
+                                    )
+                                    Text(
+                                        "Active Services: ${services.size}",
+                                        color = Color.White,
+                                        fontSize = 16.sp
+                                    )
+                                    Text(
+                                        "Favorites: ${favoriteServices.size}",
+                                        color = Color.White,
+                                        fontSize = 16.sp
+                                    )
                                 }
                             }
 
                             Spacer(modifier = Modifier.height(24.dp))
 
-                            // Reviews Section
+                            // Reviews Section - FIXED VERSION
                             Text("Recent Reviews", color = Color.White, fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(bottom = 12.dp))
 
+// Move the recentReviews state declaration outside the LaunchedEffect
                             var recentReviews by remember { mutableStateOf(listOf<Review>()) }
 
-                            // Load reviews for user's services
-                            LaunchedEffect(currentUser?.uid, services) {
-                                currentUser?.uid?.let {
+// Load reviews for user's services - FIXED VERSION
+                            // Load reviews for user's services - FIXED VERSION
+                            LaunchedEffect(currentUser?.uid, services.map { it.id }) {
+                                currentUser?.uid?.let { uid ->
                                     if (services.isNotEmpty()) {
                                         val serviceIds = services.map { it.id }
+                                        Log.d("HustlerDashboard", "Loading reviews for service IDs: $serviceIds")
+
+                                        // Check if serviceIds is not empty to avoid Firestore error
                                         if (serviceIds.isNotEmpty()) {
-                                            firestore.collection("reviews")
-                                                .whereIn("serviceId", serviceIds)
-                                                .orderBy("timestamp", Query.Direction.DESCENDING)
-                                                .limit(3)
-                                                .get()
-                                                .addOnSuccessListener { snapshot ->
-                                                    recentReviews = snapshot.documents.map { doc ->
-                                                        Review(
-                                                            id = doc.id,
-                                                            serviceId = doc.getString("serviceId") ?: "",
-                                                            userId = doc.getString("userId") ?: "",
-                                                            userName = doc.getString("userName") ?: "",
-                                                            rating = (doc.getLong("rating") ?: 0L).toInt(),
-                                                            comment = doc.getString("comment") ?: "",
-                                                            timestamp = doc.getLong("timestamp") ?: 0L
-                                                        )
+                                            try {
+                                                firestore.collection("reviews")
+                                                    .whereIn("serviceId", serviceIds)
+                                                    .orderBy("timestamp", Query.Direction.DESCENDING)
+                                                    .limit(3)
+                                                    .get()
+                                                    .addOnSuccessListener { snapshot ->
+                                                        Log.d("HustlerDashboard", "Firestore query returned ${snapshot.size()} documents")
+
+                                                        // Log each document to see what's being returned
+                                                        snapshot.documents.forEachIndexed { index, doc ->
+                                                            Log.d("HustlerDashboard", "Doc $index: ${doc.data}")
+                                                        }
+
+                                                        recentReviews = snapshot.documents.mapNotNull { doc ->
+                                                            try {
+                                                                val review = Review(
+                                                                    id = doc.id,
+                                                                    serviceId = doc.getString("serviceId") ?: "",
+                                                                    userId = doc.getString("userId") ?: "",
+                                                                    userName = doc.getString("userName") ?: "",
+                                                                    rating = (doc.getLong("rating") ?: 0L).toInt(),
+                                                                    comment = doc.getString("comment") ?: "",
+                                                                    timestamp = doc.getLong("timestamp") ?: 0L
+                                                                )
+                                                                Log.d("HustlerDashboard", "Parsed review: $review")
+                                                                review
+                                                            } catch (e: Exception) {
+                                                                Log.e("HustlerDashboard", "Error parsing review: ${e.message}")
+                                                                null
+                                                            }
+                                                        }
+                                                        Log.d("HustlerDashboard", "Final recentReviews count: ${recentReviews.size}")
                                                     }
-                                                }
-                                                .addOnFailureListener { e ->
-                                                    Log.e("HustlerDashboard", "Error loading reviews: ${e.message}")
-                                                }
+                                                    .addOnFailureListener { e ->
+                                                        Log.e("HustlerDashboard", "Error loading reviews: ${e.message}")
+                                                        recentReviews = emptyList()
+                                                    }
+                                            } catch (e: Exception) {
+                                                Log.e("HustlerDashboard", "Error in reviews query: ${e.message}")
+                                                recentReviews = emptyList()
+                                            }
+                                        } else {
+                                            Log.d("HustlerDashboard", "Service IDs list is empty")
+                                            recentReviews = emptyList()
                                         }
+                                    } else {
+                                        Log.d("HustlerDashboard", "No services found for user")
+                                        recentReviews = emptyList()
                                     }
                                 }
                             }
@@ -511,7 +671,7 @@ fun HustlerDashboard(
                             ) {
                                 Column(modifier = Modifier.padding(16.dp)) {
                                     if (recentReviews.isNotEmpty()) {
-                                        recentReviews.forEach { review ->
+                                        recentReviews.forEachIndexed { index, review ->
                                             Column(modifier = Modifier.padding(vertical = 8.dp)) {
                                                 // User and rating
                                                 Row(
@@ -521,7 +681,7 @@ fun HustlerDashboard(
                                                 ) {
                                                     Text(review.userName, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                                                     StarRating(
-                                                        rating = review.rating.toFloat(), // FIXED: Convert Int to Float
+                                                        rating = review.rating,
                                                         onRatingChange = {},
                                                         interactive = false,
                                                         starSize = 16.dp
@@ -541,10 +701,14 @@ fun HustlerDashboard(
 
                                                 Spacer(modifier = Modifier.height(4.dp))
 
-                                                // Service name
-                                                val serviceName = remember(review.serviceId) {
-                                                    services.find { it.id == review.serviceId }?.name ?: "Service"
+                                                // Service name - FIXED: Use proper state management
+                                                var serviceName by remember { mutableStateOf("Service") }
+
+                                                LaunchedEffect(review.serviceId) {
+                                                    val service = services.find { it.id == review.serviceId }
+                                                    serviceName = service?.name ?: "Service"
                                                 }
+
                                                 Text(
                                                     "For: $serviceName",
                                                     color = Color.White.copy(alpha = 0.6f),
@@ -552,8 +716,8 @@ fun HustlerDashboard(
                                                 )
                                             }
 
-                                            // Divider between reviews
-                                            if (review != recentReviews.last()) {
+                                            // Divider between reviews (except after the last one)
+                                            if (index < recentReviews.size - 1) {
                                                 HorizontalDivider(
                                                     color = Color.White.copy(alpha = 0.2f),
                                                     thickness = 1.dp,
@@ -573,58 +737,6 @@ fun HustlerDashboard(
                                     }
                                 }
                             }
-
-                            // Recent Activity Section
-                            Text("Recent Activity", color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
-
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(bottom = 24.dp),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.15f))
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp)) {
-                                    if (services.isNotEmpty()) {
-                                        val recentServices = services.sortedByDescending { it.views }.take(3)
-                                        recentServices.forEach { service ->
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                modifier = Modifier.padding(vertical = 8.dp)
-                                            ) {
-                                                if (service.bannerUrl.isNotEmpty()) {
-                                                    Image(
-                                                        painter = rememberAsyncImagePainter(service.bannerUrl),
-                                                        contentDescription = service.name,
-                                                        contentScale = ContentScale.Crop,
-                                                        modifier = Modifier
-                                                            .size(40.dp)
-                                                            .clip(RoundedCornerShape(8.dp))
-                                                    )
-                                                } else {
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .size(40.dp)
-                                                            .clip(RoundedCornerShape(8.dp))
-                                                            .background(Color(0xFF7F5A83)),
-                                                        contentAlignment = Alignment.Center
-                                                    ) {
-                                                        Icon(Icons.Default.Storefront, contentDescription = "Service", tint = Color.White, modifier = Modifier.size(20.dp))
-                                                    }
-                                                }
-                                                Spacer(modifier = Modifier.width(12.dp))
-                                                Column(modifier = Modifier.weight(1f)) {
-                                                    Text(service.name, color = Color.White, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                                    Text("${service.views} views", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        Text("No recent activity", color = Color.White.copy(alpha = 0.7f), modifier = Modifier.padding(vertical = 16.dp))
-                                    }
-                                 }
-                            }
-
                             // Your Services Section
                             Text("Your Services", color = Color.White, fontWeight = FontWeight.Bold)
                             Spacer(modifier = Modifier.height(12.dp))
@@ -633,19 +745,24 @@ fun HustlerDashboard(
                         item {
                             LazyRow(
                                 horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                modifier = Modifier.height(140.dp) // FIXED: ADDED HEIGHT CONSTRAINT
+                                modifier = Modifier.height(140.dp)
                             ) {
                                 items(services) { service ->
                                     Card(
                                         modifier = Modifier
                                             .width(120.dp)
                                             .clickable {
-                                                val intent = Intent(context, EditServiceActivity::class.java)
+                                                val intent =
+                                                    Intent(context, EditServiceActivity::class.java)
                                                 intent.putExtra("serviceId", service.id)
                                                 context.startActivity(intent)
                                             },
                                         shape = RoundedCornerShape(16.dp),
-                                        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.1f))
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = Color.White.copy(
+                                                alpha = 0.1f
+                                            )
+                                        )
                                     ) {
                                         Column {
                                             if (service.bannerUrl.isNotEmpty()) {
@@ -664,12 +781,20 @@ fun HustlerDashboard(
                                                         .fillMaxWidth()
                                                         .background(
                                                             Brush.verticalGradient(
-                                                                listOf(Color(0xFF7F5A83), Color(0xFF0D324D))
+                                                                listOf(
+                                                                    Color(0xFF7F5A83),
+                                                                    Color(0xFF0D324D)
+                                                                )
                                                             )
                                                         ),
                                                     contentAlignment = Alignment.Center
                                                 ) {
-                                                    Icon(Icons.Default.Storefront, contentDescription = "Service", tint = Color.White, modifier = Modifier.size(32.dp))
+                                                    Icon(
+                                                        Icons.Default.Storefront,
+                                                        contentDescription = "Service",
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(32.dp)
+                                                    )
                                                 }
                                             }
                                             Text(
@@ -690,11 +815,16 @@ fun HustlerDashboard(
                                         modifier = Modifier
                                             .width(120.dp)
                                             .clickable {
-                                                val intent = Intent(context, EditServiceActivity::class.java)
+                                                val intent =
+                                                    Intent(context, EditServiceActivity::class.java)
                                                 context.startActivity(intent)
                                             },
                                         shape = RoundedCornerShape(16.dp),
-                                        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.1f))
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = Color.White.copy(
+                                                alpha = 0.1f
+                                            )
+                                        )
                                     ) {
                                         Column(
                                             modifier = Modifier
@@ -703,9 +833,18 @@ fun HustlerDashboard(
                                             verticalArrangement = Arrangement.Center,
                                             horizontalAlignment = Alignment.CenterHorizontally
                                         ) {
-                                            Icon(Icons.Default.Add, contentDescription = "Add Service", tint = Color.White, modifier = Modifier.size(40.dp))
+                                            Icon(
+                                                Icons.Default.Add,
+                                                contentDescription = "Add Service",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(40.dp)
+                                            )
                                             Spacer(modifier = Modifier.height(8.dp))
-                                            Text("Add Service", color = Color.White, fontSize = 14.sp)
+                                            Text(
+                                                "Add Service",
+                                                color = Color.White,
+                                                fontSize = 14.sp
+                                            )
                                         }
                                     }
                                 }
@@ -716,51 +855,12 @@ fun HustlerDashboard(
             }
 
             // SEARCH SCREEN
-            AnimatedVisibility(
-                visible = showSearchBar,
-                enter = fadeIn(animationSpec = tween(300)),
-                exit = fadeOut(animationSpec = tween(300))
-            ) {
-                SearchScreen(
-                    allServices = allServices,
-                    searchQuery = searchQuery,
-                    onSearchQueryChange = { searchQuery = it },
-                    selectedCategory = selectedCategory,
-                    onSelectedCategoryChange = { selectedCategory = it },
-                    predefinedCategories = predefinedCategories,
-                    onServiceClick = { serviceId ->
-                        val intent = Intent(context, ServiceDetailActivity::class.java)
-                        intent.putExtra("serviceId", serviceId)
-                        context.startActivity(intent)
-                    }
-                )
-            }
-        }
-    }
 
-
-@Composable
-fun StarRating(
-    rating: Float,
-    onRatingChange: (Float) -> Unit,
-    interactive: Boolean = true,
-    starSize: Dp = 24.dp
-) {
-    Row {
-        for (i in 1..5) {
-            Icon(
-                imageVector = if (i <= rating) Icons.Default.Star else Icons.Default.StarBorder,
-                contentDescription = "Star $i",
-                tint = if (i <= rating) Color(0xFFFFD700) else Color.Gray,
-                modifier = Modifier
-                    .size(starSize)
-                    .clickable(enabled = interactive) {
-                        onRatingChange(i.toFloat())
-                    }
-            )
         }
     }
 }
+
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Preview(showBackground = true)

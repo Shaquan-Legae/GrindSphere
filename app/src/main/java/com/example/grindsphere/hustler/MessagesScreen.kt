@@ -1,5 +1,6 @@
 package com.example.grindsphere.hustler
 
+import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -8,6 +9,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,164 +27,458 @@ import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import java.text.SimpleDateFormat
+import java.util.*
 
-// Data classes
-data class Message(
-    val id: String = "",
-    val senderUid: String = "",
-    val receiverUid: String = "",
-    val content: String = "",
-    val timestamp: Long = 0L,
-    val conversationId: String = ""
-)
 
+// Conversation data class
 data class Conversation(
-    val customerUid: String,
-    val customerName: String,
-    val lastMessage: String,
-    val lastTimestamp: Long
+    val id: String = "",
+    val participants: List<String> = emptyList(),
+    val lastMessage: String = "",
+    val timestamp: Long = 0L,
+    val type: String = "chat"
 )
 
-data class User(
-    val uid: String = "",
-    val name: String = ""
-)
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MessagesScreen(
-    onOpenChat: (customerUid: String, customerName: String) -> Unit,
+    onOpenChat: (conversationId: String, customerUid: String, customerName: String) -> Unit,
     onStartNewChat: () -> Unit
 ) {
     val context = LocalContext.current
     val auth = FirebaseAuth.getInstance()
     val firestore = FirebaseFirestore.getInstance()
     val currentUser = auth.currentUser
-    var conversations by remember { mutableStateOf(listOf<Conversation>()) }
 
+    var conversations by remember { mutableStateOf(listOf<Conversation>()) }
+    var bookingRequests by remember { mutableStateOf(listOf<BookingRequest>()) }
+    var showBookingRequests by remember { mutableStateOf(true) }
+
+    // Load conversations
     LaunchedEffect(currentUser?.uid) {
         currentUser?.uid?.let { uid ->
-            firestore.collection("messages")
+            firestore.collection("conversations")
                 .whereArrayContains("participants", uid)
                 .orderBy("timestamp", Query.Direction.DESCENDING)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
-                        Toast.makeText(context, "Error: ${error.message}", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Error loading conversations: ${error.message}", Toast.LENGTH_SHORT).show()
                         return@addSnapshotListener
                     }
 
-                    val msgs = snapshot?.documents?.mapNotNull { doc ->
-                        Message(
+                    val convos = snapshot?.documents?.map { doc ->
+                        Conversation(
                             id = doc.id,
-                            senderUid = doc.getString("senderUid") ?: "",
-                            receiverUid = doc.getString("receiverUid") ?: "",
-                            content = doc.getString("content") ?: "",
+                            participants = doc.get("participants") as? List<String> ?: emptyList(),
+                            lastMessage = doc.getString("lastMessage") ?: "",
                             timestamp = doc.getLong("timestamp") ?: 0L,
-                            conversationId = doc.getString("conversationId") ?: ""
+                            type = doc.getString("type") ?: "chat"
                         )
-                    } ?: listOf()
+                    } ?: emptyList()
+                    conversations = convos
+                }
 
-                    val grouped = msgs.groupBy { it.conversationId }
-                    val convList = mutableListOf<Conversation>()
-                    for ((_, msgList) in grouped) {
-                        val lastMsg = msgList.maxByOrNull { it.timestamp } ?: continue
-                        val otherUid = if (lastMsg.senderUid == uid) lastMsg.receiverUid else lastMsg.senderUid
+            // Load booking requests
+            firestore.collection("bookingRequests")
+                .whereEqualTo("hustlerUid", uid)
+                .whereEqualTo("status", "pending")
+                .orderBy("timestamp", Query.Direction.DESCENDING)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) return@addSnapshotListener
 
-                        var customerName = otherUid
-                        firestore.collection("users").document(otherUid).get()
-                            .addOnSuccessListener { doc ->
-                                doc.getString("name")?.let { name ->
-                                    customerName = name
-                                    conversations = convList.sortedByDescending { it.lastTimestamp }
-                                }
-                            }
-
-                        convList.add(
-                            Conversation(
-                                customerUid = otherUid,
-                                customerName = customerName,
-                                lastMessage = lastMsg.content,
-                                lastTimestamp = lastMsg.timestamp
-                            )
+                    val requests = snapshot?.documents?.map { doc ->
+                        BookingRequest(
+                            id = doc.id,
+                            serviceId = doc.getString("serviceId") ?: "",
+                            serviceName = doc.getString("serviceName") ?: "",
+                            customerUid = doc.getString("customerUid") ?: "",
+                            customerName = doc.getString("customerName") ?: "",
+                            hustlerUid = doc.getString("hustlerUid") ?: "",
+                            status = doc.getString("status") ?: "pending",
+                            timestamp = doc.getLong("timestamp") ?: 0L,
+                            message = doc.getString("message") ?: ""
                         )
-                    }
-                    conversations = convList.sortedByDescending { it.lastTimestamp }
+                    } ?: emptyList()
+                    bookingRequests = requests
                 }
         }
     }
 
-    LazyColumn(
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Brush.verticalGradient(listOf(Color(0xFF0D324D), Color(0xFF7F5A83))))
-            .padding(16.dp)
     ) {
-        if (conversations.isEmpty()) {
-            item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "Welcome to Messages!",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 22.sp
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Start a conversation and your messages will appear here.",
-                        color = Color.White.copy(alpha = 0.8f),
-                        fontSize = 16.sp,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Button(
-                        onClick = { onStartNewChat() },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("Start a Conversation", color = Color.White, fontWeight = FontWeight.Bold)
-                    }
-                }
+        // Header with tabs
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            TextButton(
+                onClick = { showBookingRequests = true },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    "Connection Requests (${bookingRequests.size})",
+                    color = if (showBookingRequests) Color(0xFFFFD700) else Color.White
+                )
+            }
+
+            TextButton(
+                onClick = { showBookingRequests = false },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    "Messages (${conversations.size})",
+                    color = if (!showBookingRequests) Color(0xFFFFD700) else Color.White
+                )
             }
         }
 
-        items(conversations) { convo ->
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp)
-                    .clickable { onOpenChat(convo.customerUid, convo.customerName) },
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.2f))
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(50.dp)
-                            .clip(CircleShape)
-                            .background(Color.Gray)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
-                        Text(convo.customerName, color = Color.White, fontWeight = FontWeight.Bold)
-                        Text(
-                            convo.lastMessage,
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            maxLines = 1
+        if (showBookingRequests) {
+            BookingRequestsSection(
+                bookingRequests = bookingRequests,
+                onAccept = { request ->
+                    currentUser?.uid?.let { uid ->
+                        // Update booking status
+                        firestore.collection("bookingRequests").document(request.id)
+                            .update("status", "accepted")
+                            .addOnSuccessListener {
+                                // Create conversation
+                                createOrFindConversation(
+                                    firestore = firestore,
+                                    participant1 = uid,
+                                    participant2 = request.customerUid,
+                                    serviceName = request.serviceName,
+                                    onSuccess = { conversationId ->
+                                        Toast.makeText(context, "Connection accepted!", Toast.LENGTH_SHORT).show()
+                                    }
+                                )
+                            }
+                    }
+                },
+                onDecline = { request ->
+                    firestore.collection("bookingRequests").document(request.id)
+                        .update("status", "declined")
+                        .addOnSuccessListener {
+                            Toast.makeText(context, "Connection declined", Toast.LENGTH_SHORT).show()
+                        }
+                },
+                onChat = { request ->
+                    currentUser?.uid?.let { uid ->
+                        createOrFindConversation(
+                            firestore = firestore,
+                            participant1 = uid,
+                            participant2 = request.customerUid,
+                            serviceName = request.serviceName,
+                            onSuccess = { conversationId ->
+                                onOpenChat(conversationId, request.customerUid, request.customerName)
+                            }
                         )
                     }
+                }
+            )
+        } else {
+            ConversationsSection(
+                conversations = conversations,
+                currentUserId = currentUser?.uid ?: "",
+                onOpenChat = onOpenChat,
+                onStartNewChat = onStartNewChat
+            )
+        }
+    }
+}
+
+@Composable
+fun BookingRequestsSection(
+    bookingRequests: List<BookingRequest>,
+    onAccept: (BookingRequest) -> Unit,
+    onDecline: (BookingRequest) -> Unit,
+    onChat: (BookingRequest) -> Unit
+) {
+    if (bookingRequests.isEmpty()) {
+        EmptyState(
+            icon = Icons.Default.Person,
+            title = "No connection requests yet",
+            subtitle = "When customers connect with your services, requests will appear here"
+        )
+    } else {
+        LazyColumn(modifier = Modifier.padding(16.dp)) {
+            items(bookingRequests) { request ->
+                BookingRequestItem(
+                    request = request,
+                    onAccept = { onAccept(request) },
+                    onDecline = { onDecline(request) },
+                    onChat = { onChat(request) }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+        }
+    }
+}
+
+@Composable
+fun ConversationsSection(
+    conversations: List<Conversation>,
+    currentUserId: String,
+    onOpenChat: (conversationId: String, customerUid: String, customerName: String) -> Unit,
+    onStartNewChat: () -> Unit
+) {
+    val context = LocalContext.current
+    val firestore = FirebaseFirestore.getInstance()
+
+    if (conversations.isEmpty()) {
+        EmptyState(
+            icon = Icons.Default.Chat,
+            title = "No messages yet",
+            subtitle = "Start a conversation and your messages will appear here",
+            actionText = "Start a Conversation",
+            onAction = onStartNewChat
+        )
+    } else {
+        LazyColumn(modifier = Modifier.padding(16.dp)) {
+            items(conversations) { conversation ->
+                val otherParticipantId = conversation.participants.find { it != currentUserId } ?: ""
+                var otherUserName by remember { mutableStateOf("User") }
+
+                LaunchedEffect(otherParticipantId) {
+                    if (otherParticipantId.isNotEmpty()) {
+                        firestore.collection("users").document(otherParticipantId).get()
+                            .addOnSuccessListener { doc ->
+                                otherUserName = doc.getString("name") ?: "User"
+                            }
+                    }
+                }
+
+                ConversationItem(
+                    conversation = conversation,
+                    userName = otherUserName,
+                    onTap = {
+                        onOpenChat(conversation.id, otherParticipantId, otherUserName)
+                    }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+        }
+    }
+}
+
+@Composable
+fun EmptyState(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    actionText: String? = null,
+    onAction: () -> Unit = {}
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.7f),
+                modifier = Modifier.size(64.dp)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(title, color = Color.White.copy(alpha = 0.8f), fontSize = 16.sp)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                subtitle,
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center
+            )
+            actionText?.let {
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(
+                    onClick = onAction,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                ) {
+                    Text(it)
                 }
             }
         }
     }
 }
 
+@Composable
+fun BookingRequestItem(
+    request: BookingRequest,
+    onAccept: () -> Unit,
+    onDecline: () -> Unit,
+    onChat: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onChat() },
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFD700).copy(alpha = 0.2f))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        request.customerName,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                    Text(
+                        "Service: ${request.serviceName}",
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 14.sp
+                    )
+                    Text(
+                        "Message: ${request.message}",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 12.sp,
+                        maxLines = 2
+                    )
+                    Text(
+                        "Received: ${formatDate(request.timestamp)}",
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 10.sp
+                    )
+                }
 
+                // Action buttons
+                Row {
+                    IconButton(
+                        onClick = { onAccept() },
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Chat,
+                            contentDescription = "Accept",
+                            tint = Color.Green
+                        )
+                    }
+                    IconButton(
+                        onClick = { onDecline() },
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Person,
+                            contentDescription = "Decline",
+                            tint = Color.Red
+                        )
+                    }
+                }
+            }
+
+            // Chat button
+            Button(
+                onClick = { onChat() },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7F5A83))
+            ) {
+                Text("Open Chat")
+            }
+        }
+    }
+}
+
+@Composable
+fun ConversationItem(
+    conversation: Conversation,
+    userName: String,
+    onTap: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onTap() },
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.2f))
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(50.dp)
+                    .clip(CircleShape)
+                    .background(Color.Gray)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(userName, color = Color.White, fontWeight = FontWeight.Bold)
+                Text(
+                    conversation.lastMessage,
+                    color = Color.White.copy(alpha = 0.8f),
+                    fontSize = 14.sp,
+                    maxLines = 1
+                )
+                Text(
+                    formatDate(conversation.timestamp),
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 12.sp
+                )
+            }
+            if (conversation.type == "booking") {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(Color.Green)
+                )
+            }
+        }
+    }
+}
+
+fun formatDate(timestamp: Long): String {
+    val date = Date(timestamp)
+    val format = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
+    return format.format(date)
+}
+
+// Helper function to create or find conversation
+fun createOrFindConversation(
+    firestore: FirebaseFirestore,
+    participant1: String,
+    participant2: String,
+    serviceName: String,
+    onSuccess: (String) -> Unit
+) {
+    val participants = listOf(participant1, participant2).sorted()
+
+    firestore.collection("conversations")
+        .whereArrayContains("participants", participant1)
+        .get()
+        .addOnSuccessListener { snapshot ->
+            val existingConvo = snapshot.documents.firstOrNull { doc ->
+                val convoParticipants = doc.get("participants") as? List<*>
+                convoParticipants?.containsAll(participants) == true
+            }
+
+            if (existingConvo != null) {
+                onSuccess(existingConvo.id)
+            } else {
+                val newConvo = hashMapOf(
+                    "participants" to participants,
+                    "lastMessage" to "Connection for: $serviceName",
+                    "timestamp" to System.currentTimeMillis(),
+                    "type" to "booking"
+                )
+                firestore.collection("conversations").add(newConvo)
+                    .addOnSuccessListener { docRef ->
+                        onSuccess(docRef.id)
+                    }
+            }
+        }
+}
