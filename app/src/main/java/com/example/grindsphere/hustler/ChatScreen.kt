@@ -24,6 +24,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.ExperimentalMaterial3Api
+import com.google.firebase.Timestamp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -164,7 +165,7 @@ private fun sendMessage(
         val message = Message(
             senderId = currentUser.uid,
             text = text,
-            timestamp = com.google.firebase.Timestamp.now()
+            timestamp = Timestamp.now()
         )
 
         firestore.collection("conversations").document(conversationId)

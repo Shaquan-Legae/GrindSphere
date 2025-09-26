@@ -73,7 +73,7 @@
             android:theme="@style/Theme.GrindSphere" />
 
         <activity
-            android:name=".hustler.ChatScreenActivity"
+            android:name=".hustler.ChatActivity"
             android:exported="false"
             android:label="Chat"
             android:theme="@style/Theme.GrindSphere" />
