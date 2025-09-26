@@ -188,8 +188,7 @@ fun ExperimentSignupScreen(
                                             val user = auth.currentUser
                                             if (user != null) {
                                                 val userMap = hashMapOf(
-                                                    "name" to name,
-                                                    "surname" to surname,
+                                                    "name" to "$name $surname",
                                                     "email" to email,
                                                     "role" to userRole!!.name
                                                 )

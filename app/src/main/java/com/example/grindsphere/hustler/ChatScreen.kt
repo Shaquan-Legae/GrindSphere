@@ -15,20 +15,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.example.grindsphere.models.Message
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.ktx.toObject
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.ExperimentalMaterial3Api
-
-
-data class ChatMessage(
-    val id: String = "",
-    val senderUid: String = "",
-    val text: String = "",
-    val timestamp: Long = 0L
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,28 +39,23 @@ fun ChatScreen(
     val currentUser = auth.currentUser
     val scope = rememberCoroutineScope()
 
-    var messages by remember { mutableStateOf(listOf<ChatMessage>()) }
+    var messages by remember { mutableStateOf<List<Message>>(emptyList()) }
     var newMessage by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
 
     // Listen to messages
     LaunchedEffect(conversationId) {
-        firestore.collection("messages")
-            .whereEqualTo("conversationId", conversationId)
-            .orderBy("timestamp")
+        firestore.collection("conversations").document(conversationId)
+            .collection("messages")
+            .orderBy("timestamp", Query.Direction.ASCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     Toast.makeText(context, "Error loading messages: ${error.message}", Toast.LENGTH_SHORT).show()
                     return@addSnapshotListener
                 }
 
-                val list = snapshot?.documents?.map { doc ->
-                    ChatMessage(
-                        id = doc.id,
-                        senderUid = doc.getString("senderUid") ?: "",
-                        text = doc.getString("text") ?: "",
-                        timestamp = doc.getLong("timestamp") ?: 0L
-                    )
+                val list = snapshot?.documents?.mapNotNull { doc ->
+                    doc.toObject<Message>()?.copy(id = doc.id)
                 } ?: emptyList()
                 messages = list
 
@@ -103,7 +93,7 @@ fun ChatScreen(
                 contentPadding = PaddingValues(16.dp)
             ) {
                 items(messages) { message ->
-                    val isMe = message.senderUid == currentUser?.uid
+                    val isMe = message.senderId == currentUser?.uid
                     MessageBubble(message = message, isMe = isMe)
                 }
             }
@@ -144,7 +134,7 @@ fun ChatScreen(
 }
 
 @Composable
-fun MessageBubble(message: ChatMessage, isMe: Boolean) {
+fun MessageBubble(message: Message, isMe: Boolean) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start
@@ -171,21 +161,23 @@ private fun sendMessage(
     firestore: FirebaseFirestore
 ) {
     if (text.isNotBlank() && currentUser != null) {
-        val messageData = hashMapOf(
-            "senderUid" to currentUser.uid,
-            "receiverUid" to customerUid,
-            "text" to text,
-            "timestamp" to System.currentTimeMillis(),
-            "conversationId" to conversationId
+        val message = Message(
+            senderId = currentUser.uid,
+            text = text,
+            timestamp = com.google.firebase.Timestamp.now()
         )
 
-        firestore.collection("messages").add(messageData)
+        firestore.collection("conversations").document(conversationId)
+            .collection("messages")
+            .add(message)
 
         // Update conversation last message
         firestore.collection("conversations").document(conversationId)
-            .update(mapOf(
-                "lastMessage" to text,
-                "timestamp" to System.currentTimeMillis()
-            ))
+            .update(
+                mapOf(
+                    "lastMessage" to text,
+                    "lastMessageTimestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                )
+            )
     }
 }

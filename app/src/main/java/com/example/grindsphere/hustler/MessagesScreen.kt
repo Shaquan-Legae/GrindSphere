@@ -216,16 +216,7 @@ fun ConversationsSection(
         LazyColumn(modifier = Modifier.padding(16.dp)) {
             items(conversations) { conversation ->
                 val otherParticipantId = conversation.participants.find { it != currentUserId } ?: ""
-                var otherUserName by remember { mutableStateOf("User") }
-
-                LaunchedEffect(otherParticipantId) {
-                    if (otherParticipantId.isNotEmpty()) {
-                        firestore.collection("users").document(otherParticipantId).get()
-                            .addOnSuccessListener { doc ->
-                                otherUserName = doc.getString("name") ?: "User"
-                            }
-                    }
-                }
+                val otherUserName = conversation.participantNames[otherParticipantId] ?: "User"
 
                 ConversationItem(
                     conversation = conversation,
@@ -420,8 +411,8 @@ fun formatDate(timestamp: Long): String {
 // Helper function to create or find conversation
 fun createOrFindConversation(
     firestore: FirebaseFirestore,
-    participant1: String,
-    participant2: String,
+    participant1: String, // Hustler UID
+    participant2: String, // Customer UID
     serviceName: String,
     onSuccess: (String) -> Unit
 ) {
@@ -436,18 +427,42 @@ fun createOrFindConversation(
                 convoParticipants?.containsAll(participants) == true
             }
 
-            if (existingConvo != null) {
-                onSuccess(existingConvo.id)
-            } else {
-                val newConvo = hashMapOf(
-                    "participants" to participants,
-                    "lastMessage" to "Connection for: $serviceName",
-                    "lastMessageTimestamp" to FieldValue.serverTimestamp(),
-                )
-                firestore.collection("conversations").add(newConvo)
-                    .addOnSuccessListener { docRef ->
-                        onSuccess(docRef.id)
+            // Fetch hustler and customer names from the 'users' collection
+            val hustlerDocRef = firestore.collection("users").document(participant1)
+            val customerDocRef = firestore.collection("users").document(participant2)
+
+            hustlerDocRef.get().addOnSuccessListener { hustlerDoc ->
+                val hustlerName = hustlerDoc.getString("name") ?: "Hustler"
+                customerDocRef.get().addOnSuccessListener { customerDoc ->
+                    val customerName = customerDoc.getString("name") ?: "Customer"
+
+                    val participantNames = mapOf(
+                        participant1 to hustlerName,
+                        participant2 to customerName
+                    )
+
+                    if (existingConvo != null) {
+                        // If conversation exists, just update the names and call success
+                        firestore.collection("conversations").document(existingConvo.id)
+                            .update("participantNames", participantNames)
+                            .addOnSuccessListener {
+                                onSuccess(existingConvo.id)
+                            }
+                    } else {
+                        // If conversation doesn't exist, create it with all the correct info
+                        val newConvo = hashMapOf(
+                            "participants" to participants,
+                            "participantNames" to participantNames,
+                            "lastMessage" to "Connection for: $serviceName",
+                            "lastMessageTimestamp" to FieldValue.serverTimestamp(),
+                            "serviceName" to serviceName
+                        )
+                        firestore.collection("conversations").add(newConvo)
+                            .addOnSuccessListener { docRef ->
+                                onSuccess(docRef.id)
+                            }
                     }
+                }
             }
         }
 }
