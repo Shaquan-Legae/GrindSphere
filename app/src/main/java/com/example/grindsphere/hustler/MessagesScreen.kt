@@ -1,5 +1,6 @@
 package com.example.grindsphere.hustler
 
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -28,10 +29,12 @@ import com.example.grindsphere.models.Booking
 import com.example.grindsphere.models.Conversation
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.ktx.toObject
 import java.text.SimpleDateFormat
 import java.util.*
+import com.google.firebase.Timestamp
+
+private const val TAG = "MessagesScreen"
 
 @Composable
 fun MessagesScreen(
@@ -47,15 +50,18 @@ fun MessagesScreen(
     var conversations by remember { mutableStateOf<List<Conversation>>(emptyList()) }
     var bookingRequests by remember { mutableStateOf<List<Booking>>(emptyList()) }
     var showBookingRequests by remember { mutableStateOf(true) }
+    var isLoading by remember { mutableStateOf(false) }
 
     // Load conversations
     LaunchedEffect(currentUser?.uid) {
         currentUser?.uid?.let { uid ->
-            // Conversations without orderBy
+            Log.d(TAG, "Loading data for user: $uid")
+
             firestore.collection("conversations")
                 .whereArrayContains("participants", uid)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
+                        Log.e(TAG, "Error loading conversations: ${error.message}", error)
                         Toast.makeText(
                             context,
                             "Error loading conversations: ${error.message}",
@@ -65,27 +71,66 @@ fun MessagesScreen(
                     }
 
                     val convos = snapshot?.documents?.mapNotNull { doc ->
-                        doc.toObject<Conversation>()?.copy(id = doc.id)
-                    }?.sortedByDescending { it.lastMessageTimestamp } // Sort manually
-                        ?: emptyList()
+                        try {
+                            doc.toObject<Conversation>()?.copy(id = doc.id)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error parsing conversation doc ${doc.id}: ${e.message}")
+                            null
+                        }
+                    }?.sortedByDescending {
+                        it.lastMessageTimestamp?.let { timestamp ->
+                            when (timestamp) {
+                                is Long -> timestamp
+                                is Date -> timestamp.time
+                                is Timestamp -> timestamp.toDate().time
+                                else -> 0L
+                            }
+                        } ?: 0L
+                    } ?: emptyList()
+
+                    Log.d(TAG, "Loaded ${convos.size} conversations")
                     conversations = convos
                 }
 
-// Booking requests without orderBy
             firestore.collection("bookingRequests")
                 .whereEqualTo("hustlerId", uid)
                 .whereEqualTo("status", "pending")
                 .addSnapshotListener { snapshot, error ->
-                    if (error != null) return@addSnapshotListener
+                    if (error != null) {
+                        Log.e(TAG, "Error loading booking requests: ${error.message}", error)
+                        Toast.makeText(
+                            context,
+                            "Error loading requests: ${error.message}",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        return@addSnapshotListener
+                    }
 
                     val requests = snapshot?.documents?.mapNotNull { doc ->
-                        doc.toObject<Booking>()?.copy(id = doc.id)
-                    }?.sortedByDescending { it.timestamp } // Sort manually
-                        ?: emptyList()
+                        try {
+                            doc.toObject<Booking>()?.copy(id = doc.id)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error parsing booking doc ${doc.id}: ${e.message}")
+                            null
+                        }
+                    }?.sortedByDescending {
+                        it.timestamp?.let { timestamp ->
+                            when (timestamp) {
+                                is Long -> timestamp
+                                is Date -> timestamp.time
+                                is Timestamp -> timestamp.toDate().time
+                                else -> 0L
+                            }
+                        } ?: 0L
+                    } ?: emptyList()
+
+                    Log.d(TAG, "Loaded ${requests.size} booking requests")
                     bookingRequests = requests
                 }
+        } ?: run {
+            Log.e(TAG, "No current user found")
+            Toast.makeText(context, "Please log in first", Toast.LENGTH_SHORT).show()
         }
-
     }
 
     Column(
@@ -121,46 +166,107 @@ fun MessagesScreen(
             }
         }
 
-        if (showBookingRequests) {
+        if (isLoading) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = Color.White)
+            }
+        } else if (showBookingRequests) {
             BookingRequestsSection(
                 bookingRequests = bookingRequests,
                 onAccept = { request ->
+                    Log.d(TAG, "Accepting booking request: ${request.id}")
                     currentUser?.uid?.let { uid ->
-                        // Update booking status
+                        isLoading = true
                         firestore.collection("bookingRequests").document(request.id)
                             .update("status", "accepted")
                             .addOnSuccessListener {
-                                // Create conversation
+                                Log.d(TAG, "Booking accepted, creating conversation...")
                                 createOrFindConversation(
                                     firestore = firestore,
                                     participant1 = uid,
                                     participant2 = request.customerId,
                                     serviceName = request.serviceName,
-                                    onSuccess = {
+                                    onSuccess = { conversationId ->
+                                        isLoading = false
+                                        Log.d(TAG, "Conversation created successfully: $conversationId")
                                         Toast.makeText(context, "Connection accepted!", Toast.LENGTH_SHORT).show()
+                                    },
+                                    onError = { e ->
+                                        isLoading = false
+                                        Log.e(TAG, "Error creating conversation: ${e.message}", e)
+                                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                                     }
                                 )
                             }
+                            .addOnFailureListener { e ->
+                                isLoading = false
+                                Log.e(TAG, "Error accepting booking: ${e.message}", e)
+                                Toast.makeText(context, "Error accepting: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                    } ?: run {
+                        Log.e(TAG, "No current user when accepting booking")
+                        Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
                     }
                 },
                 onDecline = { request ->
+                    Log.d(TAG, "Declining booking request: ${request.id}")
                     firestore.collection("bookingRequests").document(request.id)
                         .update("status", "declined")
                         .addOnSuccessListener {
+                            Log.d(TAG, "Booking declined successfully")
                             Toast.makeText(context, "Connection declined", Toast.LENGTH_SHORT).show()
+                        }
+                        .addOnFailureListener { e ->
+                            Log.e(TAG, "Error declining booking: ${e.message}", e)
+                            Toast.makeText(context, "Error declining: ${e.message}", Toast.LENGTH_SHORT).show()
                         }
                 },
                 onChat = { request ->
+                    Log.d(TAG, "Opening chat for booking request: ${request.id}")
                     currentUser?.uid?.let { uid ->
+                        val customerId = request.customerId
+                        val customerName = request.customerName.ifBlank { "Customer" }
+
+                        if (customerId.isBlank()) {
+                            Log.e(TAG, "Invalid customer ID for request: ${request.id}")
+                            Toast.makeText(context, "Invalid customer ID", Toast.LENGTH_SHORT).show()
+                            return@let
+                        }
+
+                        Log.d(TAG, "Creating/finding conversation between $uid and $customerId")
+                        isLoading = true
                         createOrFindConversation(
                             firestore = firestore,
                             participant1 = uid,
-                            participant2 = request.customerId,
+                            participant2 = customerId,
                             serviceName = request.serviceName,
                             onSuccess = { conversationId ->
-                                onOpenChat(conversationId, request.customerId, request.customerName)
+                                isLoading = false
+                                if (conversationId.isNotBlank()) {
+                                    Log.d(TAG, "Opening chat with conversation: $conversationId")
+                                    try {
+                                        onOpenChat(conversationId, customerId, customerName)
+                                    } catch (e: Exception) {
+                                        Log.e(TAG, "Error in onOpenChat callback: ${e.message}", e)
+                                        Toast.makeText(context, "Error opening chat: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    }
+                                } else {
+                                    Log.e(TAG, "Empty conversation ID received")
+                                    Toast.makeText(context, "Failed to create conversation", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onError = { e ->
+                                isLoading = false
+                                Log.e(TAG, "Error creating conversation: ${e.message}", e)
+                                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                             }
                         )
+                    } ?: run {
+                        Log.e(TAG, "No current user when opening chat")
+                        Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
                     }
                 }
             )
@@ -210,6 +316,8 @@ fun ConversationsSection(
     onOpenChat: (conversationId: String, customerUid: String, customerName: String) -> Unit,
     onStartNewChat: () -> Unit
 ) {
+    val context = LocalContext.current
+
     if (conversations.isEmpty()) {
         EmptyState(
             icon = Icons.AutoMirrored.Filled.Chat,
@@ -219,7 +327,6 @@ fun ConversationsSection(
             onAction = onStartNewChat
         )
     } else {
-        val firestore = FirebaseFirestore.getInstance()
         LazyColumn(modifier = Modifier.padding(16.dp)) {
             items(conversations) { conversation ->
                 val otherParticipantId = conversation.participants.find { it != currentUserId } ?: ""
@@ -229,7 +336,13 @@ fun ConversationsSection(
                     conversation = conversation,
                     userName = otherUserName,
                     onTap = {
-                        onOpenChat(conversation.id, otherParticipantId, otherUserName)
+                        Log.d(TAG, "Opening existing conversation: ${conversation.id}")
+                        try {
+                            onOpenChat(conversation.id, otherParticipantId, otherUserName)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error opening conversation: ${e.message}", e)
+                            Toast.makeText(context, "Error opening chat: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -290,8 +403,7 @@ fun BookingRequestItem(
 ) {
     Card(
         modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onChat() },
+            .fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFFFFD700).copy(alpha = 0.2f))
     ) {
@@ -321,7 +433,7 @@ fun BookingRequestItem(
                     )
                     request.timestamp?.let {
                         Text(
-                            "Received: ${formatDate(it.time)}",
+                            "Received: ${formatDateSafe(it)}",
                             color = Color.White.copy(alpha = 0.6f),
                             fontSize = 10.sp
                         )
@@ -392,14 +504,14 @@ fun ConversationItem(
             Column(modifier = Modifier.weight(1f)) {
                 Text(userName, color = Color.White, fontWeight = FontWeight.Bold)
                 Text(
-                    conversation.lastMessage,
+                    conversation.lastMessage ?: "No messages",
                     color = Color.White.copy(alpha = 0.8f),
                     fontSize = 14.sp,
                     maxLines = 1
                 )
                 conversation.lastMessageTimestamp?.let {
                     Text(
-                        formatDate(it.time),
+                        formatDateSafe(it),
                         color = Color.White.copy(alpha = 0.6f),
                         fontSize = 12.sp
                     )
@@ -409,67 +521,157 @@ fun ConversationItem(
     }
 }
 
-fun formatDate(timestamp: Long): String {
-    val date = Date(timestamp)
-    val format = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
-    return format.format(date)
+fun formatDateSafe(timestampObj: Any?): String {
+    if (timestampObj == null) return ""
+    return try {
+        val millis = when (timestampObj) {
+            is Long -> timestampObj
+            is Date -> timestampObj.time
+            is Timestamp -> timestampObj.toDate().time
+            else -> {
+                when (timestampObj) {
+                    is Number -> timestampObj.toLong()
+                    else -> return ""
+                }
+            }
+        }
+        val date = Date(millis)
+        val format = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
+        format.format(date)
+    } catch (e: Exception) {
+        Log.e(TAG, "Error formatting date: ${e.message}")
+        ""
+    }
 }
 
-// Helper function to create or find conversation
+// Improved createOrFindConversation with better error handling
 fun createOrFindConversation(
     firestore: FirebaseFirestore,
-    participant1: String, // Hustler UID
-    participant2: String, // Customer UID
+    participant1: String,
+    participant2: String,
     serviceName: String,
-    onSuccess: (String) -> Unit
+    onSuccess: (String) -> Unit,
+    onError: (Exception) -> Unit = {}
 ) {
+    Log.d(TAG, "createOrFindConversation: $participant1, $participant2, $serviceName")
+
+    if (participant1.isBlank() || participant2.isBlank()) {
+        val error = Exception("Missing participant ID(s): p1='$participant1', p2='$participant2'")
+        Log.e(TAG, error.message ?: "Missing participant IDs")
+        onError(error)
+        return
+    }
+
     val participants = listOf(participant1, participant2).sorted()
+    Log.d(TAG, "Looking for conversation with participants: $participants")
 
     firestore.collection("conversations")
         .whereArrayContains("participants", participant1)
         .get()
         .addOnSuccessListener { snapshot ->
+            Log.d(TAG, "Found ${snapshot.documents.size} potential conversations")
+
             val existingConvo = snapshot.documents.firstOrNull { doc ->
-                val convoParticipants = doc.get("participants") as? List<*>
-                convoParticipants?.containsAll(participants) == true
+                val convoParticipants = (doc.get("participants") as? List<*>)
+                    ?.mapNotNull { it as? String }
+                val containsAll = convoParticipants?.containsAll(participants) == true
+                Log.d(TAG, "Doc ${doc.id} participants: $convoParticipants, matches: $containsAll")
+                containsAll
             }
 
-            // Fetch hustler and customer names from the 'users' collection
-            val hustlerDocRef = firestore.collection("users").document(participant1)
-            val customerDocRef = firestore.collection("users").document(participant2)
-
-            hustlerDocRef.get().addOnSuccessListener { hustlerDoc ->
-                val hustlerName = hustlerDoc.getString("name") ?: "Hustler"
-                customerDocRef.get().addOnSuccessListener { customerDoc ->
-                    val customerName = customerDoc.getString("name") ?: "Customer"
-
-                    val participantNames = mapOf(
-                        participant1 to hustlerName,
-                        participant2 to customerName
-                    )
-
-                    if (existingConvo != null) {
-                        // If conversation exists, just update the names and call success
-                        firestore.collection("conversations").document(existingConvo.id)
-                            .update("participantNames", participantNames)
-                            .addOnSuccessListener {
-                                onSuccess(existingConvo.id)
-                            }
-                    } else {
-                        // If conversation doesn't exist, create it with all the correct info
-                        val newConvo = hashMapOf(
-                            "participants" to participants,
-                            "participantNames" to participantNames,
-                            "lastMessage" to "Connection for: $serviceName",
-                            "lastMessageTimestamp" to FieldValue.serverTimestamp(),
-                            "serviceName" to serviceName
-                        )
-                        firestore.collection("conversations").add(newConvo)
-                            .addOnSuccessListener { docRef ->
-                                onSuccess(docRef.id)
-                            }
-                    }
-                }
+            if (existingConvo != null) {
+                Log.d(TAG, "Found existing conversation: ${existingConvo.id}")
+                // Just return the existing conversation ID
+                onSuccess(existingConvo.id)
+            } else {
+                Log.d(TAG, "No existing conversation found, creating new one")
+                // Create new conversation with minimal data first
+                createNewConversation(firestore, participant1, participant2, serviceName, onSuccess, onError)
             }
         }
+        .addOnFailureListener { e ->
+            Log.e(TAG, "Error finding conversation: ${e.message}", e)
+            onError(Exception("Failed to search for conversation: ${e.message}"))
+        }
 }
+
+// Separate function to create new conversation
+private fun createNewConversation(
+    firestore: FirebaseFirestore,
+    participant1: String,
+    participant2: String,
+    serviceName: String,
+    onSuccess: (String) -> Unit,
+    onError: (Exception) -> Unit
+) {
+    val participants = listOf(participant1, participant2).sorted()
+
+    // Create conversation with basic data first
+    val newConvo = hashMapOf(
+        "participants" to participants,
+        "lastMessage" to "Connection for: $serviceName",
+        "lastMessageTimestamp" to FieldValue.serverTimestamp(),
+        "serviceName" to serviceName,
+        "createdAt" to FieldValue.serverTimestamp()
+    )
+
+    firestore.collection("conversations")
+        .add(newConvo)
+        .addOnSuccessListener { docRef ->
+            Log.d(TAG, "Conversation created successfully: ${docRef.id}")
+            // Now update with participant names
+            updateParticipantNames(firestore, docRef.id, participant1, participant2, onSuccess, onError)
+        }
+        .addOnFailureListener { e ->
+            Log.e(TAG, "Error creating conversation: ${e.message}", e)
+            onError(Exception("Failed to create conversation: ${e.message}"))
+        }
+}
+
+// Update conversation with participant names
+private fun updateParticipantNames(
+    firestore: FirebaseFirestore,
+    conversationId: String,
+    participant1: String,
+    participant2: String,
+    onSuccess: (String) -> Unit,
+    onError: (Exception) -> Unit
+) {
+    val hustlerDocRef = firestore.collection("users").document(participant1)
+    val customerDocRef = firestore.collection("users").document(participant2)
+
+    hustlerDocRef.get().addOnSuccessListener { hustlerDoc ->
+        val hustlerName = hustlerDoc.getString("name") ?: "Hustler"
+
+        customerDocRef.get().addOnSuccessListener { customerDoc ->
+            val customerName = customerDoc.getString("name") ?: "Customer"
+
+            val participantNames = mapOf(
+                participant1 to hustlerName,
+                participant2 to customerName
+            )
+
+            firestore.collection("conversations")
+                .document(conversationId)
+                .update("participantNames", participantNames)
+                .addOnSuccessListener {
+                    Log.d(TAG, "Participant names updated for conversation: $conversationId")
+                    onSuccess(conversationId)
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "Error updating participant names: ${e.message}", e)
+                    // Still return success since conversation was created
+                    onSuccess(conversationId)
+                }
+        }.addOnFailureListener { e ->
+            Log.e(TAG, "Error loading customer data: ${e.message}", e)
+            // Still return success since conversation was created
+            onSuccess(conversationId)
+        }
+    }.addOnFailureListener { e ->
+        Log.e(TAG, "Error loading hustler data: ${e.message}", e)
+        // Still return success since conversation was created
+        onSuccess(conversationId)
+    }
+}
+
