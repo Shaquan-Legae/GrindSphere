@@ -25,10 +25,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
+import com.example.grindsphere.models.Service
 
 @Composable
 fun SearchScreen(
-    allServices: List<HustlerServiceCard>,
+    allServices: List<Service>,
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
     selectedCategory: String,
@@ -209,9 +210,9 @@ fun SearchScreen(
                         colors = CardDefaults.cardColors(containerColor = Color.White)
                     ) {
                         Box(modifier = Modifier.fillMaxSize()) {
-                            if (service.bannerUrl.isNotEmpty()) {
+                            if (service.banner.isNotEmpty()) {
                                 Image(
-                                    painter = rememberAsyncImagePainter(service.bannerUrl),
+                                    painter = rememberAsyncImagePainter(service.banner),
                                     contentDescription = service.name,
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.fillMaxSize()

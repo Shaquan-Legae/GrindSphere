@@ -46,6 +46,8 @@ import coil.request.ImageRequest
 import com.example.grindsphere.LoginActivity
 import com.example.grindsphere.R
 import com.example.grindsphere.models.Booking
+import com.example.grindsphere.models.Review
+import com.example.grindsphere.models.Service
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
@@ -58,14 +60,6 @@ import androidx.compose.material3.NavigationBarItem
 import com.google.firebase.firestore.ktx.toObject
 import java.text.SimpleDateFormat
 import java.util.*
-
-data class HustlerServiceCard(
-    val id: String,
-    val name: String,
-    val bannerUrl: String,
-    val views: Long = 0,
-    val categories: List<String> = listOf()
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,9 +76,9 @@ fun HustlerDashboard(
 
     var hustlerName by remember { mutableStateOf("Hustler") }
     var profilePicUrl by remember { mutableStateOf("") }
-    var services by remember { mutableStateOf(listOf<HustlerServiceCard>()) }
-    var favoriteServices by remember { mutableStateOf(listOf<HustlerServiceCard>()) }
-    var allServices by remember { mutableStateOf(listOf<HustlerServiceCard>()) }
+    var services by remember { mutableStateOf<List<Service>>(emptyList()) }
+    var favoriteServices by remember { mutableStateOf<List<Service>>(emptyList()) }
+    var allServices by remember { mutableStateOf<List<Service>>(emptyList()) }
     var totalViews by remember { mutableLongStateOf(0L) }
     var showMenu by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -116,7 +110,7 @@ fun HustlerDashboard(
     LaunchedEffect(currentUser?.uid) {
         currentUser?.uid?.let { uid ->
             firestore.collection("bookingRequests")
-                .whereEqualTo("hustlerUid", uid)
+                .whereEqualTo("hustlerId", uid)
                 .whereEqualTo("status", "pending")
                 .addSnapshotListener { snapshot, error ->
                     pendingRequests = snapshot?.size() ?: 0
@@ -172,16 +166,9 @@ fun HustlerDashboard(
                             .show()
                         return@addSnapshotListener
                     }
-                    val list = snapshot?.documents?.map { doc ->
-                        @Suppress("UNCHECKED_CAST")
-                        HustlerServiceCard(
-                            id = doc.id,
-                            name = doc.getString("name") ?: "Service",
-                            bannerUrl = doc.getString("banner") ?: "",
-                            views = doc.getLong("views") ?: 0L,
-                            categories = doc.get("categories") as? List<String> ?: listOf()
-                        )
-                    } ?: listOf()
+                    val list = snapshot?.documents?.mapNotNull { doc ->
+                        doc.toObject<Service>()?.copy(id = doc.id)
+                    } ?: emptyList()
                     services = list
                     totalViews = list.sumOf { it.views }
                 }
@@ -200,16 +187,9 @@ fun HustlerDashboard(
                     return@addSnapshotListener
                 }
 
-                val list = snapshot?.documents?.map { doc ->
-                    @Suppress("UNCHECKED_CAST")
-                    HustlerServiceCard(
-                        id = doc.id,
-                        name = doc.getString("name") ?: "Service",
-                        bannerUrl = doc.getString("banner") ?: "",
-                        views = doc.getLong("views") ?: 0L,
-                        categories = doc.get("categories") as? List<String> ?: listOf()
-                    )
-                } ?: listOf()
+                val list = snapshot?.documents?.mapNotNull { doc ->
+                    doc.toObject<Service>()?.copy(id = doc.id)
+                } ?: emptyList()
                 allServices = list
             }
     }
@@ -225,15 +205,8 @@ fun HustlerDashboard(
                         .whereIn("__name__", savedServiceIds)
                         .get()
                         .addOnSuccessListener { querySnapshot ->
-                            val favoriteList = querySnapshot.documents.map { doc ->
-                                @Suppress("UNCHECKED_CAST")
-                                HustlerServiceCard(
-                                    id = doc.id,
-                                    name = doc.getString("name") ?: "Service",
-                                    bannerUrl = doc.getString("banner") ?: "",
-                                    views = doc.getLong("views") ?: 0L,
-                                    categories = doc.get("categories") as? List<String> ?: listOf()
-                                )
+                            val favoriteList = querySnapshot.documents.mapNotNull { doc ->
+                                doc.toObject<Service>()?.copy(id = doc.id)
                             }
                             favoriteServices = favoriteList
                         }
@@ -444,7 +417,9 @@ fun HustlerDashboard(
 
                         if (favoriteServices.isEmpty()) {
                             Box(
-                                modifier = Modifier.fillMaxWidth().padding(32.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(32.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
@@ -478,9 +453,9 @@ fun HustlerDashboard(
                                         )
                                     ) {
                                         Column {
-                                            if (service.bannerUrl.isNotEmpty()) {
+                                            if (service.banner.isNotEmpty()) {
                                                 Image(
-                                                    painter = rememberAsyncImagePainter(service.bannerUrl),
+                                                    painter = rememberAsyncImagePainter(service.banner),
                                                     contentDescription = service.name,
                                                     contentScale = ContentScale.Crop,
                                                     modifier = Modifier
@@ -650,17 +625,7 @@ fun HustlerDashboard(
 
                                                         recentReviews = snapshot.documents.mapNotNull { doc ->
                                                             try {
-                                                                val review = Review(
-                                                                    id = doc.id,
-                                                                    serviceId = doc.getString("serviceId") ?: "",
-                                                                    userId = doc.getString("userId") ?: "",
-                                                                    userName = doc.getString("userName") ?: "",
-                                                                    rating = (doc.getLong("rating") ?: 0L).toInt(),
-                                                                    comment = doc.getString("comment") ?: "",
-                                                                    timestamp = doc.getLong("timestamp") ?: 0L
-                                                                )
-                                                                Log.d("HustlerDashboard", "Parsed review: $review")
-                                                                review
+                                                                doc.toObject<Review>()?.copy(id = doc.id)
                                                             } catch (e: Exception) {
                                                                 Log.e("HustlerDashboard", "Error parsing review: ${e.message}")
                                                                 null
@@ -790,9 +755,9 @@ fun HustlerDashboard(
                                         )
                                     ) {
                                         Column {
-                                            if (service.bannerUrl.isNotEmpty()) {
+                                            if (service.banner.isNotEmpty()) {
                                                 Image(
-                                                    painter = rememberAsyncImagePainter(service.bannerUrl),
+                                                    painter = rememberAsyncImagePainter(service.banner),
                                                     contentDescription = service.name,
                                                     contentScale = ContentScale.Crop,
                                                     modifier = Modifier
@@ -990,6 +955,34 @@ fun BookingCard(booking: Booking, onAccept: () -> Unit, onDecline: () -> Unit) {
             } else {
                 Text("Status: ${booking.status.replaceFirstChar { it.titlecase(Locale.getDefault()) }}", color = Color.White)
             }
+        }
+    }
+}
+
+@Composable
+fun StarRating(
+    rating: Int,
+    onRatingChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    starSize: Dp = 24.dp,
+    interactive: Boolean = true
+) {
+    Row(modifier = modifier) {
+        for (i in 1..5) {
+            Icon(
+                imageVector = if (i <= rating) Icons.Filled.Star else Icons.Filled.StarBorder,
+                contentDescription = "Star $i",
+                tint = if (i <= rating) Color(0xFFFFD700) else Color.Gray,
+                modifier = Modifier
+                    .size(starSize)
+                    .then(
+                        if (interactive) {
+                            Modifier.clickable { onRatingChange(i) }
+                        } else {
+                            Modifier
+                        }
+                    )
+            )
         }
     }
 }

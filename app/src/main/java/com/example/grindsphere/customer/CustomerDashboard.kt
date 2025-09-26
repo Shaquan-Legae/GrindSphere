@@ -19,6 +19,8 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -853,72 +855,116 @@ fun ConversationCard(conversation: Conversation, navController: NavHostControlle
 @Composable
 fun ChatScreen(conversationId: String) {
     var messages by remember { mutableStateOf<List<Message>>(emptyList()) }
-    var newMessageText by remember { mutableStateOf("") }
-    val auth = FirebaseAuth.getInstance()
+    var messageText by remember { mutableStateOf("") } // This is the correct state variable
+    var isLoading by remember { mutableStateOf(true) }
     val firestore = FirebaseFirestore.getInstance()
+    val auth = FirebaseAuth.getInstance()
     val currentUserId = auth.currentUser?.uid
 
-    LaunchedEffect(conversationId) {
-        firestore.collection("conversations").document(conversationId)
-            .collection("messages").orderBy("timestamp")
-            .addSnapshotListener { snapshots, e ->
-                if (e != null) {
-                    return@addSnapshotListener
-                }
-                if (snapshots != null) {
-                    messages = snapshots.documents.mapNotNull { doc ->
-                        doc.toObject<Message>()?.copy(id = doc.id)
-                    }
-                }
-            }
+    // Function to send a message
+    fun onSendMessage(text: String) {
+        if (text.isBlank() || currentUserId == null) return
+
+        val message = Message(
+            senderId = currentUserId,
+            text = text,
+            timestamp = Timestamp.now()
+        )
+
+        val conversationRef = firestore.collection("conversations").document(conversationId)
+
+        // Add message to the messages sub-collection
+        conversationRef.collection("messages").add(message)
+
+        // Update the last message in the parent conversation document
+        conversationRef.update(
+            "lastMessage", text,
+            "lastMessageTimestamp", FieldValue.serverTimestamp()
+        )
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier
-                .weight(1f)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            reverseLayout = true
-        ) {
-            items(messages.reversed(), key = { it.id }) { message ->
-                MessageBubble(message = message, isFromCurrentUser = message.senderId == currentUserId)
+    // Fetch messages
+    LaunchedEffect(conversationId) {
+        val messagesListener = firestore.collection("conversations").document(conversationId)
+            .collection("messages")
+            .orderBy("timestamp")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    isLoading = false
+                    return@addSnapshotListener
+                }
+                messages = snapshot?.documents?.mapNotNull { it.toObject<Message>() } ?: emptyList()
+                isLoading = false
+            }
+        // Remember to remove the listener when the composable leaves the screen (not shown here but good practice)
+    }
+
+    Scaffold(
+        bottomBar = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextField(
+                    value = messageText,
+                    onValueChange = { messageText = it },
+                    placeholder = { Text("Type a message...") },
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = {
+                    if (messageText.isNotBlank()) {
+                        // FIX: Use the 'messageText' variable here
+                        onSendMessage(messageText)
+                        // Also, clear the input field after sending
+                        messageText = ""
+                    }
+                }) {
+                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send Message")
+                }
             }
         }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedTextField(
-                value = newMessageText,
-                onValueChange = { newMessageText = it },
-                label = { Text("Type a message") },
-                modifier = Modifier.weight(1f)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(onClick = {
-                if (newMessageText.isNotBlank() && currentUserId != null) {
-                    val message = Message(
-                        conversationId = conversationId,
-                        senderId = currentUserId,
-                        senderName = auth.currentUser?.displayName ?: "Customer",
-                        text = newMessageText,
-                        timestamp = Timestamp.now()
-                    )
-                    firestore.collection("conversations").document(conversationId)
-                        .collection("messages").add(message)
-                    firestore.collection("conversations").document(conversationId)
-                        .update(mapOf(
-                            "lastMessage" to newMessageText,
-                            "lastMessageTimestamp" to FieldValue.serverTimestamp()
-                        ))
-                    newMessageText = ""
+    ) { paddingValues ->
+        if (isLoading) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(horizontal = 8.dp),
+                reverseLayout = true // Show latest messages at the bottom
+            ) {
+                items(messages.reversed()) { message ->
+                    // Basic message bubble layout
+                    val isSentByCurrentUser = message.senderId == currentUserId
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = if (isSentByCurrentUser) Alignment.CenterEnd else Alignment.CenterStart
+                    ) {
+                        Card(
+                            modifier = Modifier
+                                .padding(vertical = 4.dp)
+                                .widthIn(max = 300.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isSentByCurrentUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp)) {
+                                Text(text = message.text)
+                                Text(
+                                    text = SimpleDateFormat("h:mm a", Locale.getDefault()).format(message.timestamp.toDate()),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.align(Alignment.End)
+                                )
+                            }
+                        }
+                    }
                 }
-            }) {
-                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
             }
         }
     }

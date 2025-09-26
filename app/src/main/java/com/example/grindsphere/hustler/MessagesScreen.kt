@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import com.google.firebase.firestore.FieldValue
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,21 +25,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.grindsphere.models.Booking
+import com.example.grindsphere.models.Conversation
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.ktx.toObject
 import java.text.SimpleDateFormat
 import java.util.*
-
-// Conversation data class
-data class Conversation(
-    val id: String = "",
-    val participants: List<String> = emptyList(),
-    val lastMessage: String = "",
-    val timestamp: Long = 0L,
-    val type: String = "chat"
-)
 
 @Composable
 fun MessagesScreen(
@@ -59,7 +52,7 @@ fun MessagesScreen(
         currentUser?.uid?.let { uid ->
             firestore.collection("conversations")
                 .whereArrayContains("participants", uid)
-                .orderBy("timestamp", Query.Direction.DESCENDING)
+                .orderBy("lastMessageTimestamp", Query.Direction.DESCENDING)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
                         Toast.makeText(context, "Error loading conversations: ${error.message}", Toast.LENGTH_SHORT).show()
@@ -406,19 +399,13 @@ fun ConversationItem(
                     fontSize = 14.sp,
                     maxLines = 1
                 )
-                Text(
-                    formatDate(conversation.timestamp),
-                    color = Color.White.copy(alpha = 0.6f),
-                    fontSize = 12.sp
-                )
-            }
-            if (conversation.type == "booking") {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(Color.Green)
-                )
+                conversation.lastMessageTimestamp?.let {
+                    Text(
+                        formatDate(it.time),
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 12.sp
+                    )
+                }
             }
         }
     }
@@ -455,8 +442,7 @@ fun createOrFindConversation(
                 val newConvo = hashMapOf(
                     "participants" to participants,
                     "lastMessage" to "Connection for: $serviceName",
-                    "timestamp" to System.currentTimeMillis(),
-                    "type" to "booking"
+                    "lastMessageTimestamp" to FieldValue.serverTimestamp(),
                 )
                 firestore.collection("conversations").add(newConvo)
                     .addOnSuccessListener { docRef ->

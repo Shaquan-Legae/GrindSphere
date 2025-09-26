@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
@@ -31,16 +30,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.rememberAsyncImagePainter
+import com.example.grindsphere.models.Service
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
-
-data class ServiceCard(
-    val id: String,
-    val name: String,
-    val bannerUrl: String,
-    val bookings: Long = 0,
-    val categories: List<String> = listOf()
-)
+import com.google.firebase.firestore.ktx.toObject
 
 @OptIn(ExperimentalMaterial3Api::class)
 class HomePageActivity : ComponentActivity() {
@@ -59,8 +52,8 @@ fun HomePageScreen(
 ) {
     val context = LocalContext.current
     val firestore = FirebaseFirestore.getInstance()
-    var featuredServices by remember { mutableStateOf(listOf<HustlerServiceCard>()) }
-    var popularServices by remember { mutableStateOf(listOf<HustlerServiceCard>()) }
+    var featuredServices by remember { mutableStateOf<List<Service>>(emptyList()) }
+    var popularServices by remember { mutableStateOf<List<Service>>(emptyList()) }
 
     // Fetch featured and popular services
     LaunchedEffect(Unit) {
@@ -69,14 +62,8 @@ fun HomePageScreen(
             .limit(10)
             .get()
             .addOnSuccessListener { snapshot ->
-                val list = snapshot.documents.map { doc ->
-                    HustlerServiceCard(
-                        id = doc.id,
-                        name = doc.getString("name") ?: "Service",
-                        bannerUrl = doc.getString("banner") ?: "",
-                        views = doc.getLong("views") ?: 0L,
-                        categories = doc.get("categories") as? List<String> ?: listOf()
-                    )
+                val list = snapshot.documents.mapNotNull { doc ->
+                    doc.toObject<Service>()?.copy(id = doc.id)
                 }
                 popularServices = list
 
@@ -166,9 +153,9 @@ fun HomePageScreen(
                             colors = CardDefaults.cardColors(containerColor = Color.White)
                         ) {
                             Box(modifier = Modifier.fillMaxSize()) {
-                                if (service.bannerUrl.isNotEmpty()) {
+                                if (service.banner.isNotEmpty()) {
                                     Image(
-                                        painter = rememberAsyncImagePainter(service.bannerUrl),
+                                        painter = rememberAsyncImagePainter(service.banner),
                                         contentDescription = service.name,
                                         contentScale = ContentScale.Crop,
                                         modifier = Modifier.fillMaxSize()
@@ -329,9 +316,9 @@ fun HomePageScreen(
                             colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.1f))
                         ) {
                             Column {
-                                if (service.bannerUrl.isNotEmpty()) {
+                                if (service.banner.isNotEmpty()) {
                                     Image(
-                                        painter = rememberAsyncImagePainter(service.bannerUrl),
+                                        painter = rememberAsyncImagePainter(service.banner),
                                         contentDescription = service.name,
                                         contentScale = ContentScale.Crop,
                                         modifier = Modifier
