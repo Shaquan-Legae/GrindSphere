@@ -58,6 +58,7 @@ fun ServiceDetailScreen(serviceId: String?) {
     val context = LocalContext.current
     val firestore = FirebaseFirestore.getInstance()
     val auth = FirebaseAuth.getInstance()
+    val currentUser = auth.currentUser // ADD THIS LINE
 
     var serviceName by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -76,8 +77,11 @@ fun ServiceDetailScreen(serviceId: String?) {
     var averageRating by remember { mutableStateOf(0f) }
     var totalReviews by remember { mutableStateOf(0) }
 
-    // Load service
-    LaunchedEffect(serviceId) {
+    var canReview by remember { mutableStateOf(false) }
+    var userReview by remember { mutableStateOf<Review?>(null) }
+
+    // Load service and check if user can review
+    LaunchedEffect(serviceId, currentUser?.uid) {
         if (!serviceId.isNullOrEmpty()) {
             firestore.collection("services").document(serviceId).get()
                 .addOnSuccessListener { doc ->
@@ -90,6 +94,9 @@ fun ServiceDetailScreen(serviceId: String?) {
                     location = doc.getString("location") ?: ""
                     profilePicUrl = doc.getString("profilePicUrl") ?: ""
 
+                    // Check if current user is NOT the service owner
+                    canReview = currentUser?.uid != ownerUid && currentUser != null
+
                     // Load owner profile picture and name
                     firestore.collection("users").document(ownerUid).get()
                         .addOnSuccessListener { userDoc ->
@@ -97,13 +104,22 @@ fun ServiceDetailScreen(serviceId: String?) {
                         }
 
                     // Check if current user has favorited this service
-                    val currentUser = auth.currentUser
                     if (currentUser != null) {
                         firestore.collection("users").document(currentUser.uid).get()
                             .addOnSuccessListener { userDoc ->
                                 val saved = userDoc.get("savedServices") as? List<String> ?: listOf()
                                 isFavorite = saved.contains(serviceId)
                             }
+
+                        // Check if user already has a review
+                        checkUserReview(serviceId, currentUser.uid, firestore) { review ->
+                            userReview = review
+                            // Pre-fill the dialog if user has an existing review
+                            review?.let {
+                                userRating = it.rating.toFloat()
+                                userComment = it.comment
+                            }
+                        }
                     }
                 }
         }
@@ -396,20 +412,32 @@ fun ServiceDetailScreen(serviceId: String?) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Add Review Button
-            Button(
-                onClick = { showReviewDialog = true },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7F5A83))
-            ) {
-                Text("Add Review")
+            if (canReview && userReview == null) {
+                Button(
+                    onClick = { showReviewDialog = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7F5A83))
+                ) {
+                    Text("Add Review")
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            } else if (userReview != null && canReview) {
+                // Show edit button if user has a review
+                Button(
+                    onClick = { showReviewDialog = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                ) {
+                    Text("Edit Your Review")
+                }
+                Spacer(modifier = Modifier.height(16.dp))
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Reviews List
+            // Reviews List - UPDATED to show delete option
             if (reviews.isEmpty()) {
                 Text(
                     text = "No reviews yet. Be the first to review!",
@@ -424,7 +452,13 @@ fun ServiceDetailScreen(serviceId: String?) {
                     modifier = Modifier.padding(horizontal = 16.dp)
                 ) {
                     reviews.forEach { review ->
-                        ReviewItem(review = review)
+                        ReviewItem(
+                            review = review,
+                            isUserReview = review.userId == currentUser?.uid,
+                            onDeleteReview = {
+                                deleteReview(review.id, firestore, context)
+                            }
+                        )
                         Spacer(modifier = Modifier.height(12.dp))
                     }
                 }
@@ -534,14 +568,16 @@ fun ServiceDetailScreen(serviceId: String?) {
         }
     }
 
-    // Review Dialog
+    // Update the review dialog section in ServiceDetailScreen
     if (showReviewDialog) {
         AlertDialog(
             onDismissRequest = { showReviewDialog = false },
-            title = { Text("Add Review") },
+            title = {
+                Text(if (userReview == null) "Add Review" else "Edit Review")
+            },
             text = {
                 Column {
-                    // Star Rating - FIXED: Convert Float to Int and back
+                    // Star Rating
                     Text("Rating:", modifier = Modifier.padding(bottom = 8.dp))
                     StarRating(
                         rating = userRating.roundToInt(),
@@ -571,7 +607,7 @@ fun ServiceDetailScreen(serviceId: String?) {
                                     .addOnSuccessListener { userDoc ->
                                         val userName = userDoc.getString("name") ?: "User"
 
-                                        val review = hashMapOf(
+                                        val reviewData = hashMapOf(
                                             "serviceId" to serviceId,
                                             "userId" to currentUser.uid,
                                             "userName" to userName,
@@ -580,16 +616,30 @@ fun ServiceDetailScreen(serviceId: String?) {
                                             "timestamp" to System.currentTimeMillis()
                                         )
 
-                                        firestore.collection("reviews").add(review)
-                                            .addOnSuccessListener {
-                                                Toast.makeText(context, "Review added!", Toast.LENGTH_SHORT).show()
-                                                showReviewDialog = false
-                                                userRating = 0f
-                                                userComment = ""
-                                            }
-                                            .addOnFailureListener {
-                                                Toast.makeText(context, "Failed to add review", Toast.LENGTH_SHORT).show()
-                                            }
+                                        if (userReview == null) {
+                                            // Add new review
+                                            firestore.collection("reviews").add(reviewData)
+                                                .addOnSuccessListener {
+                                                    Toast.makeText(context, "Review added!", Toast.LENGTH_SHORT).show()
+                                                    showReviewDialog = false
+                                                    userRating = 0f
+                                                    userComment = ""
+                                                }
+                                                .addOnFailureListener {
+                                                    Toast.makeText(context, "Failed to add review", Toast.LENGTH_SHORT).show()
+                                                }
+                                        } else {
+                                            // Update existing review
+                                            firestore.collection("reviews").document(userReview!!.id)
+                                                .set(reviewData)
+                                                .addOnSuccessListener {
+                                                    Toast.makeText(context, "Review updated!", Toast.LENGTH_SHORT).show()
+                                                    showReviewDialog = false
+                                                }
+                                                .addOnFailureListener {
+                                                    Toast.makeText(context, "Failed to update review", Toast.LENGTH_SHORT).show()
+                                                }
+                                        }
                                     }
                             }
                         } else {
@@ -597,7 +647,7 @@ fun ServiceDetailScreen(serviceId: String?) {
                         }
                     }
                 ) {
-                    Text("Submit")
+                    Text(if (userReview == null) "Submit" else "Update")
                 }
             },
             dismissButton = {
@@ -609,16 +659,22 @@ fun ServiceDetailScreen(serviceId: String?) {
             }
         )
     }
-}
+} // ADD THIS CLOSING BRACE - This was missing!
 
 @Composable
-fun ReviewItem(review: Review) {
+fun ReviewItem(
+    review: Review,
+    isUserReview: Boolean = false,
+    onDeleteReview: () -> Unit = {}
+) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            // User name and rating
+            // User name, rating, and delete button
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -630,12 +686,29 @@ fun ReviewItem(review: Review) {
                     color = Color.Black
                 )
 
-                StarRating(
-                    rating = review.rating,
-                    onRatingChange = {},
-                    interactive = false,
-                    starSize = 16.dp
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    StarRating(
+                        rating = review.rating,
+                        onRatingChange = {},
+                        interactive = false,
+                        starSize = 16.dp
+                    )
+
+                    // Show delete button only if it's the user's review
+                    if (isUserReview) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        IconButton(
+                            onClick = { showDeleteDialog = true },
+                            modifier = Modifier.size(20.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete review",
+                                tint = Color.Red
+                            )
+                        }
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -658,13 +731,40 @@ fun ReviewItem(review: Review) {
             )
         }
     }
-}
 
-// Add this helper function to format timestamp
-fun formatTimestamp(timestamp: Long): String {
-    val date = Date(timestamp)
-    val format = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
-    return format.format(date)
+    // Delete Confirmation Dialog
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showDeleteDialog = false
+            },
+            title = {
+                Text("Delete Review")
+            },
+            text = {
+                Text("Are you sure you want to delete your review? This action cannot be undone.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteReview()
+                        showDeleteDialog = false
+                    }
+                ) {
+                    Text("Delete", color = Color.Red)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteDialog = false
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -688,4 +788,53 @@ fun StarRating(
             )
         }
     }
+}
+
+// Add this helper function to format timestamp
+fun formatTimestamp(timestamp: Long): String {
+    val date = Date(timestamp)
+    val format = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+    return format.format(date)
+}
+
+// Helper function to check if user already has a review
+private fun checkUserReview(
+    serviceId: String,
+    userId: String,
+    firestore: FirebaseFirestore,
+    onResult: (Review?) -> Unit
+) {
+    firestore.collection("reviews")
+        .whereEqualTo("serviceId", serviceId)
+        .whereEqualTo("userId", userId)
+        .get()
+        .addOnSuccessListener { snapshot ->
+            val review = snapshot.documents.firstOrNull()?.let { doc ->
+                Review(
+                    id = doc.id,
+                    serviceId = doc.getString("serviceId") ?: "",
+                    userId = doc.getString("userId") ?: "",
+                    userName = doc.getString("userName") ?: "",
+                    rating = (doc.getLong("rating") ?: 0L).toInt(),
+                    comment = doc.getString("comment") ?: "",
+                    timestamp = doc.getLong("timestamp") ?: 0L
+                )
+            }
+            onResult(review)
+        }
+        .addOnFailureListener {
+            onResult(null)
+        }
+}
+
+// Function to delete a review
+private fun deleteReview(reviewId: String, firestore: FirebaseFirestore, context: android.content.Context) {
+    firestore.collection("reviews").document(reviewId)
+        .delete()
+        .addOnSuccessListener {
+            Toast.makeText(context, "Review deleted successfully", Toast.LENGTH_SHORT).show()
+        }
+        .addOnFailureListener { e ->
+            Toast.makeText(context, "Failed to delete review: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
 }

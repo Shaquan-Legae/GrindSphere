@@ -832,6 +832,7 @@ fun ConversationCard(conversation: Conversation, navController: NavHostControlle
     val auth = FirebaseAuth.getInstance()
     val currentUserId = auth.currentUser?.uid
     val otherParticipantId = conversation.participants.find { it != currentUserId }
+    // Use the actual name from participantNames map
     val otherParticipantName = conversation.participantNames[otherParticipantId] ?: "Unknown"
 
     Card(
@@ -853,6 +854,7 @@ fun ConversationCard(conversation: Conversation, navController: NavHostControlle
         }
     }
 }
+
 
 @Composable
 fun ChatScreen(conversationId: String) {
