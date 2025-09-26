@@ -58,7 +58,7 @@ fun ServiceDetailScreen(serviceId: String?) {
     val context = LocalContext.current
     val firestore = FirebaseFirestore.getInstance()
     val auth = FirebaseAuth.getInstance()
-    val currentUser = auth.currentUser // ADD THIS LINE
+    val currentUser = auth.currentUser
 
     var serviceName by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -79,6 +79,8 @@ fun ServiceDetailScreen(serviceId: String?) {
 
     var canReview by remember { mutableStateOf(false) }
     var userReview by remember { mutableStateOf<Review?>(null) }
+    var showAllReviews by remember { mutableStateOf(false) }
+    val displayedReviews = if (showAllReviews) reviews else reviews.take(3)
 
     // Load service and check if user can review
     LaunchedEffect(serviceId, currentUser?.uid) {
@@ -291,7 +293,7 @@ fun ServiceDetailScreen(serviceId: String?) {
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Rating and Reviews - FIXED: Convert averageRating to Int
+                // Rating and Reviews
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(vertical = 4.dp)
@@ -402,9 +404,9 @@ fun ServiceDetailScreen(serviceId: String?) {
                 Spacer(modifier = Modifier.height(24.dp))
             }
 
-            // Reviews Section
+            // Reviews Section - UPDATED with pagination
             Text(
-                text = "Reviews",
+                text = "Reviews ($totalReviews)",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 16.dp)
@@ -437,21 +439,40 @@ fun ServiceDetailScreen(serviceId: String?) {
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // Reviews List - UPDATED to show delete option
+            // Reviews List - UPDATED with pagination
             if (reviews.isEmpty()) {
-                Text(
-                    text = "No reviews yet. Be the first to review!",
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    textAlign = TextAlign.Center,
-                    color = Color.Gray
-                )
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Default.StarOutline,
+                            contentDescription = "No reviews",
+                            tint = Color.Gray,
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "No reviews yet",
+                            color = Color.Gray,
+                            fontSize = 16.sp
+                        )
+                        Text(
+                            text = "Be the first to review this service!",
+                            color = Color.Gray.copy(alpha = 0.7f),
+                            fontSize = 14.sp
+                        )
+                    }
+                }
             } else {
                 Column(
                     modifier = Modifier.padding(horizontal = 16.dp)
                 ) {
-                    reviews.forEach { review ->
+                    // Display limited reviews
+                    displayedReviews.forEach { review ->
                         ReviewItem(
                             review = review,
                             isUserReview = review.userId == currentUser?.uid,
@@ -460,6 +481,68 @@ fun ServiceDetailScreen(serviceId: String?) {
                             }
                         )
                         Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    // "View All" or "Show Less" button
+                    if (reviews.size > 3) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = { showAllReviews = !showAllReviews },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(40.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.Transparent,
+                                contentColor = Color(0xFF7F5A83)
+                            ),
+                            elevation = ButtonDefaults.buttonElevation(0.dp)
+                        ) {
+                            Text(
+                                text = if (showAllReviews) "Show Less" else "View All Reviews ($totalReviews)",
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    // Average rating summary when showing all reviews
+                    if (showAllReviews && reviews.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF7F5A83).copy(alpha = 0.1f))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "Overall Rating",
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF7F5A83)
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    StarRating(
+                                        rating = averageRating.roundToInt(),
+                                        onRatingChange = {},
+                                        interactive = false,
+                                        starSize = 20.dp
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = String.format(Locale.US, "%.1f", averageRating),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 18.sp,
+                                        color = Color(0xFF7F5A83)
+                                    )
+                                }
+                                Text(
+                                    text = "Based on $totalReviews reviews",
+                                    color = Color.Gray,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -568,7 +651,7 @@ fun ServiceDetailScreen(serviceId: String?) {
         }
     }
 
-    // Update the review dialog section in ServiceDetailScreen
+    // Review Dialog
     if (showReviewDialog) {
         AlertDialog(
             onDismissRequest = { showReviewDialog = false },
@@ -659,7 +742,7 @@ fun ServiceDetailScreen(serviceId: String?) {
             }
         )
     }
-} // ADD THIS CLOSING BRACE - This was missing!
+}
 
 @Composable
 fun ReviewItem(
@@ -671,63 +754,85 @@ fun ReviewItem(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(2.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            // User name, rating, and delete button
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Header with user info and rating
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = review.userName,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Black
-                )
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    StarRating(
-                        rating = review.rating,
-                        onRatingChange = {},
-                        interactive = false,
-                        starSize = 16.dp
-                    )
-
-                    // Show delete button only if it's the user's review
-                    if (isUserReview) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        IconButton(
-                            onClick = { showDeleteDialog = true },
-                            modifier = Modifier.size(20.dp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // User avatar
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF7F5A83).copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = "Delete review",
-                                tint = Color.Red
+                            Text(
+                                text = review.userName.take(1).uppercase(),
+                                color = Color(0xFF7F5A83),
+                                fontWeight = FontWeight.Bold
                             )
                         }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = review.userName,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Black,
+                            fontSize = 14.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Rating and date
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        StarRating(
+                            rating = review.rating,
+                            onRatingChange = {},
+                            interactive = false,
+                            starSize = 14.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = formatTimestamp(review.timestamp),
+                            color = Color.Gray,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
+                // Delete button (only for user's own reviews)
+                if (isUserReview) {
+                    IconButton(
+                        onClick = { showDeleteDialog = true },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "Options",
+                            tint = Color.Gray
+                        )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Comment - show full comment without truncation
+            // Comment
             Text(
                 text = review.comment,
                 color = Color.Black.copy(alpha = 0.8f),
                 fontSize = 14.sp,
+                lineHeight = 18.sp,
                 modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Timestamp
-            Text(
-                text = formatTimestamp(review.timestamp),
-                color = Color.Black.copy(alpha = 0.6f),
-                fontSize = 12.sp
             )
         }
     }
@@ -779,7 +884,7 @@ fun StarRating(
             Icon(
                 imageVector = if (i <= rating) Icons.Default.Star else Icons.Default.StarOutline,
                 contentDescription = "Star $i",
-                tint = if (i <= rating) Color(0xFFFFD700) else Color.Gray,
+                tint = if (i <= rating) Color(0xFFFFD700) else Color.Gray.copy(alpha = 0.5f),
                 modifier = Modifier
                     .size(starSize)
                     .clickable(enabled = interactive) {
