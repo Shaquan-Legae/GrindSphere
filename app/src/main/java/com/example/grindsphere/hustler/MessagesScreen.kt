@@ -223,7 +223,20 @@ fun ConversationsSection(
         LazyColumn(modifier = Modifier.padding(16.dp)) {
             items(conversations) { conversation ->
                 val otherParticipantId = conversation.participants.find { it != currentUserId } ?: ""
-                val otherUserName = conversation.participantNames[otherParticipantId] ?: "User"
+                var otherUserName by remember { mutableStateOf("User") }
+
+                LaunchedEffect(otherParticipantId) {
+                    if (otherParticipantId.isNotEmpty()) {
+                        firestore.collection("users").document(otherParticipantId).get()
+                            .addOnSuccessListener { document ->
+                                if (document != null) {
+                                    val name = document.getString("name") ?: ""
+                                    val surname = document.getString("surname") ?: ""
+                                    otherUserName = "$name $surname".trim()
+                                }
+                            }
+                    }
+                }
 
                 ConversationItem(
                     conversation = conversation,

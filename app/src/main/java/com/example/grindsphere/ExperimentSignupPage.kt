@@ -33,6 +33,7 @@ fun ExperimentSignupScreen(
     val context = LocalContext.current
     var name by remember { mutableStateOf("") }
     var surname by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
@@ -115,6 +116,16 @@ fun ExperimentSignupScreen(
             )
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Username
+            OutlinedTextField(
+                value = username,
+                onValueChange = { username = it },
+                label = { Text("Username") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
             // Email
             OutlinedTextField(
                 value = email,
@@ -176,7 +187,7 @@ fun ExperimentSignupScreen(
             Button(
                 onClick = {
                     if (!isPreview) {
-                        if (name.isNotEmpty() && surname.isNotEmpty() && email.isNotEmpty()
+                        if (name.isNotEmpty() && surname.isNotEmpty() && username.isNotEmpty() && email.isNotEmpty()
                             && password.isNotEmpty() && confirmPassword.isNotEmpty()
                             && userRole != null
                         ) {
@@ -188,7 +199,9 @@ fun ExperimentSignupScreen(
                                             val user = auth.currentUser
                                             if (user != null) {
                                                 val userMap = hashMapOf(
-                                                    "name" to "$name $surname",
+                                                    "name" to name,
+                                                    "surname" to surname,
+                                                    "username" to username,
                                                     "email" to email,
                                                     "role" to userRole!!.name
                                                 )
@@ -203,6 +216,7 @@ fun ExperimentSignupScreen(
                                                         ).show()
                                                         navController?.navigate("login")
                                                     }
+
                                                     ?.addOnFailureListener { e ->
                                                         loading = false
                                                         Toast.makeText(
