@@ -748,6 +748,8 @@ fun ServiceCardPreview() {
     ServiceCard(service = sampleService, onClick = {})
 }
 
+
+
 @Preview(showBackground = true)
 @Composable
 fun BookingCardPreview() {

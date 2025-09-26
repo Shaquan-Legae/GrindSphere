@@ -36,7 +36,8 @@ import java.util.*
 @Composable
 fun MessagesScreen(
     onOpenChat: (conversationId: String, customerUid: String, customerName: String) -> Unit,
-    onStartNewChat: () -> Unit
+    onStartNewChat: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val auth = FirebaseAuth.getInstance()
@@ -50,35 +51,41 @@ fun MessagesScreen(
     // Load conversations
     LaunchedEffect(currentUser?.uid) {
         currentUser?.uid?.let { uid ->
+            // Conversations without orderBy
             firestore.collection("conversations")
                 .whereArrayContains("participants", uid)
-                .orderBy("lastMessageTimestamp", Query.Direction.DESCENDING)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
-                        Toast.makeText(context, "Error loading conversations: ${error.message}", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            context,
+                            "Error loading conversations: ${error.message}",
+                            Toast.LENGTH_SHORT
+                        ).show()
                         return@addSnapshotListener
                     }
 
                     val convos = snapshot?.documents?.mapNotNull { doc ->
                         doc.toObject<Conversation>()?.copy(id = doc.id)
-                    } ?: emptyList()
+                    }?.sortedByDescending { it.lastMessageTimestamp } // Sort manually
+                        ?: emptyList()
                     conversations = convos
                 }
 
-            // Load booking requests
+// Booking requests without orderBy
             firestore.collection("bookingRequests")
                 .whereEqualTo("hustlerId", uid)
                 .whereEqualTo("status", "pending")
-                .orderBy("timestamp", Query.Direction.DESCENDING)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) return@addSnapshotListener
 
                     val requests = snapshot?.documents?.mapNotNull { doc ->
                         doc.toObject<Booking>()?.copy(id = doc.id)
-                    } ?: emptyList()
+                    }?.sortedByDescending { it.timestamp } // Sort manually
+                        ?: emptyList()
                     bookingRequests = requests
                 }
         }
+
     }
 
     Column(
