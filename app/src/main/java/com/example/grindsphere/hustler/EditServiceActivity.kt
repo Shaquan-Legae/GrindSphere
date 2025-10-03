@@ -362,22 +362,17 @@ fun EditServiceScreen(serviceId: String?) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     for (cat in categoriesList) {
-                        val selected = selectedCategories.contains(cat)
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            tonalElevation = if (selected) 6.dp else 0.dp,
-                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-                            modifier = Modifier
-                                .clickable {
-                                    selectedCategories = if (selected) selectedCategories - cat else selectedCategories + cat
+                        FilterChip(
+                            selected = selectedCategories.contains(cat),
+                            onClick = {
+                                selectedCategories = if (selectedCategories.contains(cat)) {
+                                    selectedCategories - cat
+                                } else {
+                                    selectedCategories + cat
                                 }
-                        ) {
-                            Text(
-                                text = cat,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-                            )
-                        }
+                            },
+                            label = { Text(cat) }
+                        )
                     }
                 }
 
