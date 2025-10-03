@@ -132,7 +132,6 @@ fun GrindSphereLogin(isPreview: Boolean = false, onNavigateToSignup: () -> Unit)
                                             // You need to create AdminDashboardActivity
                                             // val intent = Intent(context, AdminDashboardActivity::class.java)
                                             // context.startActivity(intent)
-                                            // (context as? ComponentActivity)?.finish()
                                         } else {
                                             // Regular user role check
                                             val user = auth.currentUser
@@ -149,7 +148,6 @@ fun GrindSphereLogin(isPreview: Boolean = false, onNavigateToSignup: () -> Unit)
                                                             }
                                                             Toast.makeText(context, "Login successful!", Toast.LENGTH_SHORT).show()
                                                             context.startActivity(Intent(context, destination))
-                                                            (context as? ComponentActivity)?.finish()
                                                         } else {
                                                             Toast.makeText(context, "Error: User data not found", Toast.LENGTH_SHORT).show()
                                                         }
@@ -187,11 +185,7 @@ fun GrindSphereLogin(isPreview: Boolean = false, onNavigateToSignup: () -> Unit)
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
-            TextButton(onClick = {
-                // This should use the callback for better navigation in Compose
-                onNavigateToSignup()
-                // context.startActivity(Intent(context, SignupActivity::class.java))
-            }) {
+            TextButton(onClick = onNavigateToSignup) {
                 Text("Don't have an account? Sign Up", color = Color.White)
             }
         }

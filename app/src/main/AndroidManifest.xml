@@ -22,7 +22,8 @@
             android:name=".LoginActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.GrindSphere" >
+            android:theme="@style/Theme.GrindSphere"
+            android:launchMode="singleTop">
         </activity>
 
         <!-- MainActivity is now the launcher activity -->

@@ -2,6 +2,7 @@
 
 package com.example.grindsphere.customer
 
+import android.content.Intent
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -36,6 +37,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import coil.compose.rememberAsyncImagePainter
+import com.example.grindsphere.LoginActivity
 import com.example.grindsphere.models.Booking
 import com.example.grindsphere.models.Conversation
 import com.example.grindsphere.models.Message
@@ -549,6 +551,7 @@ fun StatusBadge(status: String) {
 
 @Composable
 fun CustomerProfileScreen() {
+    val context = LocalContext.current
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -560,7 +563,10 @@ fun CustomerProfileScreen() {
             Spacer(modifier = Modifier.height(16.dp))
             Button(onClick = {
                 FirebaseAuth.getInstance().signOut()
-                // Navigate to login screen
+                val intent = Intent(context, LoginActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                }
+                context.startActivity(intent)
             }) {
                 Text("Sign Out")
             }

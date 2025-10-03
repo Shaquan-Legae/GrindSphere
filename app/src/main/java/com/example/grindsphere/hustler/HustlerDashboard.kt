@@ -260,8 +260,10 @@ fun HustlerDashboard(
                             text = { Text("Logout") },
                             onClick = {
                                 auth.signOut()
-                                context.startActivity(Intent(context, LoginActivity::class.java))
-                                (context as? ComponentActivity)?.finish()
+                                val intent = Intent(context, LoginActivity::class.java).apply {
+                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                }
+                                context.startActivity(intent)
                             }
                         )
                     }
