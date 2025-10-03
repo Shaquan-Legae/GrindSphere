@@ -3,7 +3,6 @@
 package com.example.grindsphere.customer
 
 import android.content.Intent
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
@@ -20,17 +19,19 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -42,11 +43,12 @@ import com.example.grindsphere.models.Booking
 import com.example.grindsphere.models.Conversation
 import com.example.grindsphere.models.Message
 import com.example.grindsphere.models.Service
+import com.example.grindsphere.models.Review
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.ktx.toObject
+import com.google.firebase.firestore.toObject
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -67,27 +69,36 @@ fun CustomerDashboardScreen() {
     Scaffold(
         bottomBar = { CustomerBottomNavigation(navController) }
     ) { padding ->
-        NavHost(
-            navController = navController,
-            startDestination = "services",
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .background(Brush.verticalGradient(listOf(Color(0xFF0D324D), Color(0xFF7F5A83))))
         ) {
-            composable("services") { ServicesScreen(navController) }
-            composable("bookings") { BookingsScreen() }
-            composable("conversations") { ConversationsScreen(navController) }
-            composable("profile") { CustomerProfileScreen() }
-            composable("serviceDetails/{serviceId}") { backStackEntry ->
-                val serviceId = backStackEntry.arguments?.getString("serviceId") ?: ""
-                ServiceDetailsScreen(serviceId = serviceId, navController = navController)
-            }
-            composable("chat/{conversationId}") { backStackEntry ->
-                val conversationId = backStackEntry.arguments?.getString("conversationId")
-                if (conversationId != null) {
-                    ChatScreen(conversationId = conversationId)
-                } else {
-                    // Handle the case where conversationId is null, maybe show an error message
+            NavHost(
+                navController = navController,
+                startDestination = "services",
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            ) {
+                composable("services") { ServicesScreen(navController) }
+                composable("bookings") { BookingsScreen() }
+                composable("conversations") { ConversationsScreen(navController) }
+                composable("profile") { CustomerProfileScreen() }
+                composable("serviceDetails/{serviceId}") { backStackEntry ->
+                    val serviceId = backStackEntry.arguments?.getString("serviceId") ?: ""
+                    ServiceDetailsScreen(serviceId = serviceId, navController = navController)
+                }
+                composable("chat/{conversationId}") { backStackEntry ->
+                    val conversationId = backStackEntry.arguments?.getString("conversationId")
+                    if (conversationId != null) {
+                        ChatScreen(conversationId = conversationId)
+                    } else {
+                        // Handle the case where conversationId is null
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("Error: No conversation ID")
+                        }
+                    }
                 }
             }
         }
@@ -99,7 +110,9 @@ fun CustomerBottomNavigation(navController: NavHostController) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: "services"
 
-    NavigationBar {
+    NavigationBar(
+        containerColor = Color.White
+    ) {
         NavigationBarItem(
             icon = { Icon(Icons.Filled.Home, contentDescription = "Services") },
             label = { Text("Services") },
@@ -126,7 +139,6 @@ fun CustomerBottomNavigation(navController: NavHostController) {
         )
     }
 }
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ServicesScreen(navController: NavHostController) {
@@ -134,10 +146,13 @@ fun ServicesScreen(navController: NavHostController) {
     var isLoading by remember { mutableStateOf(true) }
     var selectedCategory by remember { mutableStateOf("All") }
     var searchQuery by remember { mutableStateOf("") }
-    var searchActive by remember { mutableStateOf(false) }
 
-    // categories shown to the user remain generic
-    val categories = listOf("All", "Home Services", "Beauty", "Tech", "Education", "Other")
+    // Use the same categories as Hustler dashboard
+    val predefinedCategories = listOf(
+        "All", "Tutoring", "Design", "Tech Support", "Photography",
+        "Fashion", "Food", "Music", "Fitness", "Transport", "Nails",
+        "Hair", "Beauty", "Cake", "DJ", "Home Services", "Education"
+    )
 
     val firestore = FirebaseFirestore.getInstance()
 
@@ -153,72 +168,145 @@ fun ServicesScreen(navController: NavHostController) {
             .addOnFailureListener { isLoading = false }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Search bar
-        SearchBar(
-            query = searchQuery,
-            onQueryChange = { searchQuery = it },
-            onSearch = { searchActive = false },
-            active = searchActive,
-            onActiveChange = { searchActive = it },
-            placeholder = { Text("Search services") },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search Icon") },
-            trailingIcon = {
-                if (searchActive && searchQuery.isNotEmpty()) {
-                    Icon(
-                        modifier = Modifier.clickable {
-                            if (searchQuery.isNotEmpty()) {
-                                searchQuery = ""
-                            } else {
-                                searchActive = false
-                            }
-                        },
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Clear Search"
-                    )
-                }
-            },
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Brush.verticalGradient(listOf(Color(0xFF0D324D), Color(0xFF7F5A83))))
+    ) {
+        // Header
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = if (searchActive) 0.dp else 16.dp)
-                .padding(top = 16.dp, bottom = if (searchActive) 0.dp else 16.dp)
+                .padding(24.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Search suggestions slot left empty
+            Column {
+                Text(
+                    "Discover Services",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                Text(
+                    "Find amazing services near you",
+                    fontSize = 16.sp,
+                    color = Color.White.copy(alpha = 0.8f)
+                )
+            }
         }
 
-        if (!searchActive) {
-            Text(
-                text = "Categories",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        // Search bar
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            TextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Search by name or category...", color = Color.Gray) },
+                singleLine = true,
+                leadingIcon = {
+                    Icon(Icons.Default.Search, contentDescription = "Search", tint = Color(0xFF7F5A83))
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotBlank()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color(0xFF7F5A83))
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black
+                ),
+                textStyle = LocalTextStyle.current.copy(fontSize = 16.sp)
             )
+        }
 
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(categories) { category ->
-                    FilterChip(
-                        selected = selectedCategory == category,
-                        onClick = { selectedCategory = category },
-                        label = { Text(category) }
+        // Categories
+        Text(
+            text = "Categories",
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+        )
+
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            modifier = Modifier.padding(bottom = 16.dp)
+        ) {
+            items(predefinedCategories) { category ->
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (selectedCategory == category) Color(0xFFFFD700) else Color.White.copy(alpha = 0.2f),
+                    modifier = Modifier.clickable {
+                        selectedCategory = category
+                    }
+                ) {
+                    Text(
+                        text = category,
+                        color = if (selectedCategory == category) Color.Black else Color.White,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                 }
             }
         }
+
+        // Clear filters button
+        if (searchQuery.isNotBlank() || selectedCategory != "All") {
+            Text(
+                text = "Clear Filters",
+                color = Color(0xFFFFD700),
+                modifier = Modifier
+                    .clickable {
+                        searchQuery = ""
+                        selectedCategory = "All"
+                    }
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .align(Alignment.End)
+            )
+        }
+
+        // Services list header
+        Text(
+            text = when {
+                searchQuery.isNotBlank() && selectedCategory != "All" -> "Results for '$searchQuery' in $selectedCategory"
+                searchQuery.isNotBlank() -> "Results for '$searchQuery'"
+                selectedCategory != "All" -> "Results in $selectedCategory"
+                else -> "All Services"
+            },
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+        )
 
         if (isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+                CircularProgressIndicator(color = Color.White)
             }
         } else {
             val servicesToDisplay = services.filter { service ->
-                val categoryMatch = selectedCategory == "All" || service.category == selectedCategory
+                val categoryMatch = selectedCategory == "All" ||
+                        service.categories.any { it.equals(selectedCategory, ignoreCase = true) } ||
+                        service.category.equals(selectedCategory, ignoreCase = true)
+
                 val searchMatch = searchQuery.isBlank() ||
                         service.name.contains(searchQuery, ignoreCase = true) ||
                         service.description.contains(searchQuery, ignoreCase = true) ||
                         service.location.contains(searchQuery, ignoreCase = true) ||
-                        service.categories.joinToString(" ").contains(searchQuery, ignoreCase = true)
+                        service.categories.any { it.contains(searchQuery, ignoreCase = true) }
+
                 categoryMatch && searchMatch
             }
 
@@ -226,22 +314,35 @@ fun ServicesScreen(navController: NavHostController) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(16.dp),
+                        .padding(32.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        if (searchQuery.isNotBlank())
-                            "No services found for '$searchQuery'."
-                        else "No services found in this category."
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Default.SearchOff,
+                            contentDescription = "No results",
+                            tint = Color.White.copy(alpha = 0.7f),
+                            modifier = Modifier.size(64.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            if (searchQuery.isNotBlank() || selectedCategory != "All") {
+                                "No services found"
+                            } else {
+                                "No services available yet"
+                            },
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontSize = 16.sp
+                        )
+                    }
                 }
             } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(all = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    modifier = Modifier.padding(bottom = 16.dp)
                 ) {
-                    items(servicesToDisplay, key = { it.id }) { service ->
-                        // ServiceCard is not edited. It will receive the Service model.
+                    items(servicesToDisplay) { service ->
                         ServiceCard(
                             service = service,
                             onClick = { navController.navigate("serviceDetails/${service.id}") }
@@ -253,199 +354,10 @@ fun ServicesScreen(navController: NavHostController) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ServiceDetailsScreen(
-    serviceId: String,
-    navController: NavHostController
-) {
-    var service by remember { mutableStateOf<Service?>(null) }
-    var isLoading by remember { mutableStateOf(true) }
-    var bookingMessage by remember { mutableStateOf("") }
-    val context = LocalContext.current
-    val auth = FirebaseAuth.getInstance()
-    val firestore = FirebaseFirestore.getInstance()
-
-    // Fetch service from Firestore
-    LaunchedEffect(serviceId) {
-        firestore.collection("services")
-            .document(serviceId)
-            .get()
-            .addOnSuccessListener { doc ->
-                if (doc.exists()) {
-                    service = doc.toObject<Service>()?.copy(id = doc.id)
-                }
-                isLoading = false
-            }
-            .addOnFailureListener { isLoading = false }
-    }
-
-    if (isLoading) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
-        }
-        return
-    }
-
-    service?.let { srv ->
-        Column(modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)) {
-            // Use banner if available, else first image, else placeholder
-            val imageToShow = srv.banner.ifBlank { srv.images.firstOrNull() ?: "" }
-            if (imageToShow.isNotBlank()) {
-                Image(
-                    painter = rememberAsyncImagePainter(imageToShow),
-                    contentDescription = "Service image for ${srv.name}",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp)
-                        .clip(RoundedCornerShape(12.dp)),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp)
-                        .background(Color.LightGray.copy(alpha = 0.5f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Image,
-                        contentDescription = "No image available",
-                        tint = Color.Gray,
-                        modifier = Modifier.size(48.dp)
-                    )
-                }
-            }
-
-            Text(srv.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text(srv.description, style = MaterialTheme.typography.bodyMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Category: ${srv.category}", style = MaterialTheme.typography.bodySmall)
-            Text("Location: ${srv.location}", style = MaterialTheme.typography.bodySmall)
-            Spacer(modifier = Modifier.height(8.dp))
-            // Provider display only if present in document
-            if (srv.ownerName.isNotBlank()) {
-                Text("Provider: ${srv.ownerName}", style = MaterialTheme.typography.bodySmall)
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-            // Price only show when present (> 0.0)
-            if (srv.price > 0.0) {
-                Text("Price: R${String.format(Locale.US, "%.2f", srv.price)}", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-            // Rating only show when present (> 0.0)
-            if (srv.rating > 0.0) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Star,
-                        contentDescription = "Rating",
-                        tint = Color(0xFFFFD700),
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(String.format(Locale.US, "%.1f", srv.rating), style = MaterialTheme.typography.bodyMedium)
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Booking Form
-            OutlinedTextField(
-                value = bookingMessage,
-                onValueChange = { bookingMessage = it },
-                label = { Text("Message to provider") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Button(
-                    onClick = {
-                        val customerId = auth.currentUser?.uid ?: return@Button
-                        val booking = Booking(
-                            serviceId = srv.id,
-                            serviceName = srv.name,
-                            customerId = customerId,
-                            customerName = auth.currentUser?.displayName ?: "",
-                            hustlerId = srv.ownerUid,
-                            hustlerName = srv.ownerName,
-                            message = bookingMessage,
-                            price = srv.price
-                        )
-                        firestore.collection("bookingRequests")
-                            .add(booking)
-                            .addOnSuccessListener {
-                                Toast.makeText(context, "Booking requested!", Toast.LENGTH_SHORT).show()
-                                navController.navigate("bookings")
-                            }
-                            .addOnFailureListener {
-                                Toast.makeText(context, "Failed to book.", Toast.LENGTH_SHORT).show()
-                            }
-                    },
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Book Now")
-                }
-                OutlinedButton(
-                    onClick = {
-                        val currentUserId = auth.currentUser?.uid
-                        if (currentUserId == null || srv.ownerUid.isEmpty()) return@OutlinedButton
-
-                        // Check for existing conversation
-                        firestore.collection("conversations")
-                            .whereEqualTo("serviceId", srv.id)
-                            .whereArrayContains("participants", currentUserId)
-                            .get()
-                            .addOnSuccessListener { querySnapshot ->
-                                if (!querySnapshot.isEmpty) {
-                                    // Conversation exists
-                                    val conversationId = querySnapshot.documents.first().id
-                                    navController.navigate("chat/$conversationId")
-                                } else {
-                                    // Create new conversation
-                                    val newConversation = Conversation(
-                                        participants = listOf(currentUserId, srv.ownerUid),
-                                        participantNames = mapOf(
-                                            currentUserId to (auth.currentUser?.displayName ?: "Customer"),
-                                            srv.ownerUid to srv.ownerName
-                                        ),
-                                        serviceId = srv.id,
-                                        serviceName = srv.name,
-                                        lastMessage = "Chat started..."
-                                    )
-                                    firestore.collection("conversations")
-                                        .add(newConversation)
-                                        .addOnSuccessListener { docRef ->
-                                            navController.navigate("chat/${docRef.id}")
-                                        }
-                                }
-                            }
-                    },
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Message")
-                }
-            }
-        }
-    } ?: Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("Service not found.")
-    }
-}
 
 @Composable
 fun BookingsScreen() {
-    var bookings by remember { mutableStateOf<List<Booking>>(emptyList()) }
+    var bookings by remember { mutableStateOf<List<com.example.grindsphere.models.Booking>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     val firestore = FirebaseFirestore.getInstance()
     val auth = FirebaseAuth.getInstance()
@@ -460,7 +372,7 @@ fun BookingsScreen() {
             .get()
             .addOnSuccessListener { result ->
                 bookings = result.documents.mapNotNull { doc ->
-                    doc.toObject<Booking>()?.copy(id = doc.id)
+                    doc.toObject<com.example.grindsphere.models.Booking>()?.copy(id = doc.id)
                 }
                 isLoading = false
             }
@@ -470,16 +382,23 @@ fun BookingsScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(Brush.verticalGradient(listOf(Color(0xFF0D324D), Color(0xFF7F5A83))))
             .padding(16.dp)
     ) {
-        Text("My Bookings", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(bottom = 16.dp))
+        Text(
+            "My Bookings",
+            style = MaterialTheme.typography.headlineSmall,
+            color = Color.White,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
         if (isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+                CircularProgressIndicator(color = Color.White)
             }
         } else if (bookings.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("You have no bookings yet.")
+                Text("You have no bookings yet.", color = Color.White)
             }
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -492,11 +411,11 @@ fun BookingsScreen() {
 }
 
 @Composable
-fun BookingCard(booking: Booking) {
+fun BookingCard(booking: com.example.grindsphere.models.Booking) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.15f))
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -504,21 +423,27 @@ fun BookingCard(booking: Booking) {
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(booking.serviceName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    booking.serviceName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
                 StatusBadge(status = booking.status)
             }
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Provider: ${booking.hustlerName}", style = MaterialTheme.typography.bodyMedium)
+            Text("Provider: ${booking.hustlerName}", style = MaterialTheme.typography.bodyMedium, color = Color.White)
             booking.timestamp?.let {
                 Text(
                     "Date: ${SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()).format(it)}",
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White
                 )
             }
-            Text("Price: R${String.format(Locale.US, "%.2f", booking.price)}", style = MaterialTheme.typography.bodyMedium)
+            Text("Price: R${String.format(Locale.US, "%.2f", booking.price)}", style = MaterialTheme.typography.bodyMedium, color = Color.White)
             if (booking.message.isNotBlank()) {
                 Spacer(modifier = Modifier.height(4.dp))
-                Text("Message: ${booking.message}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                Text("Message: ${booking.message}", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.7f))
             }
         }
     }
@@ -581,142 +506,102 @@ fun ServiceCard(
 ) {
     Card(
         modifier = Modifier
-            .fillMaxWidth()
+            .width(280.dp)
+            .height(200.dp)
             .clickable { onClick() },
-        shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
-        Column {
-            // Banner image
-            if (service.banner.isNotBlank()) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (service.banner.isNotEmpty()) {
                 Image(
                     painter = rememberAsyncImagePainter(service.banner),
-                    contentDescription = "Banner for ${service.name}",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(160.dp)
-                        .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)),
-                    contentScale = ContentScale.Crop
+                    contentDescription = service.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
                 )
             } else {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(160.dp)
-                        .background(Color.LightGray.copy(alpha = 0.3f)),
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color(0xFF7F5A83), Color(0xFF0D324D))
+                            )
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Image,
-                        contentDescription = "No banner",
-                        tint = Color.Gray,
-                        modifier = Modifier.size(48.dp)
+                        Icons.Default.Storefront,
+                        contentDescription = "Service",
+                        tint = Color.White,
+                        modifier = Modifier.size(40.dp)
                     )
                 }
             }
 
-            Column(modifier = Modifier.padding(12.dp)) {
-                // Profile pic and service info
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (service.profilePicUrl.isNotBlank()) {
-                        Image(
-                            painter = rememberAsyncImagePainter(service.profilePicUrl),
-                            contentDescription = "Provider profile picture",
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(RoundedCornerShape(50)),
-                            contentScale = ContentScale.Crop
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f)),
+                            startY = 100f
                         )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(RoundedCornerShape(50))
-                                .background(Color.Gray.copy(alpha = 0.4f)),
-                            contentAlignment = Alignment.Center
-                        ) {
+                    )
+            )
+
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(16.dp)
+            ) {
+                Text(
+                    service.name,
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Rating and views
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (service.rating > 0.0) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = "No profile pic",
-                                tint = Color.DarkGray,
-                                modifier = Modifier.size(24.dp)
+                                imageVector = Icons.Default.Star,
+                                contentDescription = "Rating",
+                                tint = Color(0xFFFFD700),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                String.format(Locale.US, "%.1f", service.rating),
+                                color = Color.White,
+                                fontSize = 14.sp
                             )
                         }
                     }
                     Spacer(modifier = Modifier.width(8.dp))
-                    Column {
-                        Text(
-                            service.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        if (service.ownerName.isNotBlank()) {
-                            Text(
-                                text = "by ${service.ownerName}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.Gray
-                            )
-                        }
-                    }
+                    Text(
+                        "${service.views} views",
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 12.sp
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Short description
-                Text(
-                    text = service.description,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Location, price, rating, bookings
-                Row(
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column {
-                        if (service.location.isNotBlank()) {
-                            Text(
-                                "📍 ${service.location}",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        if (service.price > 0.0) {
-                            Text(
-                                "R${String.format(Locale.US, "%.2f", service.price)}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        if (service.rating > 0.0) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.Star,
-                                    contentDescription = "Rating",
-                                    tint = Color(0xFFFFD700),
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    String.format(Locale.US, "%.1f", service.rating),
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-                        }
-                        if (service.bookings > 0) {
-                            Text(
-                                "${service.bookings} bookings",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.Gray
-                            )
-                        }
-                    }
+                // Categories
+                if (service.categories.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        service.categories.joinToString(" • "),
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }
@@ -895,7 +780,7 @@ fun ChatScreen(conversationId: String) {
 
     // Fetch messages
     LaunchedEffect(conversationId) {
-        val messagesListener = firestore.collection("conversations").document(conversationId)
+        firestore.collection("conversations").document(conversationId)
             .collection("messages")
             .orderBy("timestamp")
             .addSnapshotListener { snapshot, error ->
@@ -906,7 +791,6 @@ fun ChatScreen(conversationId: String) {
                 messages = snapshot?.documents?.mapNotNull { it.toObject<Message>() } ?: emptyList()
                 isLoading = false
             }
-        // Remember to remove the listener when the composable leaves the screen (not shown here but good practice)
     }
 
     Scaffold(
