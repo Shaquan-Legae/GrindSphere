@@ -440,23 +440,20 @@ fun BookingCard(booking: com.example.grindsphere.models.Booking) {
                     color = Color.White
                 )
             }
-            Text("Price: R${String.format(Locale.US, "%.2f", booking.price)}", style = MaterialTheme.typography.bodyMedium, color = Color.White)
-            if (booking.message.isNotBlank()) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("Message: ${booking.message}", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.7f))
+
             }
         }
     }
-}
+
 
 @Composable
 fun StatusBadge(status: String) {
     val (backgroundColor, textColor) = when (status.lowercase(Locale.ROOT)) {
-        "accepted" -> Color.Green.copy(alpha = 0.2f) to Color.Green.copy(alpha = 0.9f)
-        "rejected" -> Color.Red.copy(alpha = 0.2f) to Color.Red.copy(alpha = 0.9f)
-        "completed" -> Color.Blue.copy(alpha = 0.2f) to Color.Blue.copy(alpha = 0.9f)
-        "pending" -> Color.Yellow.copy(alpha = 0.3f) to Color(0xFFB8860B)
-        else -> Color.Gray.copy(alpha = 0.2f) to Color.DarkGray
+        "accepted" -> Color.Green.copy(alpha = 0.2f) to Color.Black.copy(alpha = 0.9f)
+        "declined" -> Color.Red.copy(alpha = 0.2f) to Color.Black.copy(alpha = 0.9f)
+        "completed" -> Color.Blue.copy(alpha = 0.2f) to Color.Black.copy(alpha = 0.9f)
+        "pending" -> Color.Yellow.copy(alpha = 0.3f) to Color.Black
+        else -> Color.Gray.copy(alpha = 0.2f) to Color.Black
     }
 
     Box(
@@ -666,7 +663,7 @@ fun StatusBadgePreview() {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         StatusBadge(status = "pending")
         StatusBadge(status = "accepted")
-        StatusBadge(status = "rejected")
+        StatusBadge(status = "declined")
         StatusBadge(status = "completed")
         StatusBadge(status = "unknown")
     }
