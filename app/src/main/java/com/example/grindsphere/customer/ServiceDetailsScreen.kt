@@ -33,7 +33,6 @@ import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
 import com.example.grindsphere.models.Review
 import com.example.grindsphere.models.Service
-import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -50,20 +49,50 @@ fun ServiceDetailsScreen(
 ) {
     var service by remember { mutableStateOf<Service?>(null) }
     var isLoading by remember { mutableStateOf(true) }
-    var bookingMessage by remember { mutableStateOf("") }
     var reviews by remember { mutableStateOf<List<Review>>(emptyList()) }
     var averageRating by remember { mutableStateOf(0f) }
     var showReviewDialog by remember { mutableStateOf(false) }
-    var userRating by remember { mutableStateOf(0f) }
+    var userRating by remember { mutableStateOf(0) }
     var userComment by remember { mutableStateOf("") }
     var userReview by remember { mutableStateOf<Review?>(null) }
     var showAllReviews by remember { mutableStateOf(false) }
+    var currentUserName by remember { mutableStateOf("") }
+    var canReview by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val auth = FirebaseAuth.getInstance()
     val firestore = FirebaseFirestore.getInstance()
+    val currentUserId = auth.currentUser?.uid
 
-    // Fetch service and reviews
+    // Debug info
+    LaunchedEffect(currentUserId, service, userReview) {
+        println("DEBUG: currentUserId = $currentUserId")
+        println("DEBUG: service ownerUid = ${service?.ownerUid}")
+        println("DEBUG: userReview = $userReview")
+        println("DEBUG: canReview = $canReview")
+
+        // Update canReview condition
+        canReview = currentUserId != null &&
+                currentUserId != service?.ownerUid &&
+                userReview == null
+        println("DEBUG: Updated canReview = $canReview")
+    }
+
+    // Fetch current user's name from Firestore
+    LaunchedEffect(currentUserId) {
+        if (currentUserId != null) {
+            firestore.collection("users").document(currentUserId).get()
+                .addOnSuccessListener { doc ->
+                    currentUserName = doc.getString("name") ?: "Customer"
+                    println("DEBUG: Loaded user name: $currentUserName")
+                }
+                .addOnFailureListener {
+                    currentUserName = "Customer"
+                }
+        }
+    }
+
+    // Fetch service
     LaunchedEffect(serviceId) {
         firestore.collection("services")
             .document(serviceId)
@@ -71,18 +100,27 @@ fun ServiceDetailsScreen(
             .addOnSuccessListener { doc ->
                 if (doc.exists()) {
                     service = doc.toObject<Service>()?.copy(id = doc.id)
+                    println("DEBUG: Loaded service: ${service?.name}")
                 }
                 isLoading = false
             }
-            .addOnFailureListener { isLoading = false }
+            .addOnFailureListener {
+                isLoading = false
+            }
+    }
 
-        // Load reviews
-        firestore.collection("reviews")
+    // Set up real-time listener for reviews
+    LaunchedEffect(serviceId) {
+        val reviewsListener = firestore.collection("reviews")
             .whereEqualTo("serviceId", serviceId)
             .orderBy("timestamp", Query.Direction.DESCENDING)
-            .get()
-            .addOnSuccessListener { snapshot ->
-                reviews = snapshot.documents.mapNotNull { doc ->
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    println("DEBUG: Error loading reviews: ${error.message}")
+                    return@addSnapshotListener
+                }
+
+                val updatedReviews = snapshot?.documents?.mapNotNull { doc ->
                     Review(
                         id = doc.id,
                         serviceId = doc.getString("serviceId") ?: "",
@@ -92,21 +130,30 @@ fun ServiceDetailsScreen(
                         comment = doc.getString("comment") ?: "",
                         timestamp = doc.getLong("timestamp") ?: 0L
                     )
-                }
+                } ?: emptyList()
+
+                println("DEBUG: Loaded ${updatedReviews.size} reviews")
+                reviews = updatedReviews
 
                 // Calculate average rating
-                if (reviews.isNotEmpty()) {
-                    averageRating = reviews.map { it.rating }.average().toFloat()
+                if (updatedReviews.isNotEmpty()) {
+                    averageRating = updatedReviews.map { it.rating }.average().toFloat()
+                } else {
+                    averageRating = 0f
                 }
 
                 // Check if current user has a review
-                val currentUserId = auth.currentUser?.uid
                 if (currentUserId != null) {
-                    userReview = reviews.find { it.userId == currentUserId }
+                    userReview = updatedReviews.find { it.userId == currentUserId }
                     userReview?.let {
-                        userRating = it.rating.toFloat()
+                        userRating = it.rating
                         userComment = it.comment
+                        println("DEBUG: Found user review with rating: ${it.rating}")
                     }
+
+                    // Update canReview after loading reviews
+                    canReview = currentUserId != service?.ownerUid && userReview == null
+                    println("DEBUG: Final canReview after reviews loaded = $canReview")
                 }
             }
     }
@@ -266,6 +313,17 @@ fun ServiceDetailsScreen(
                             Text(srv.location, color = Color.White.copy(alpha = 0.8f))
                         }
                     }
+
+                    // Price
+                    if (srv.price > 0.0) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "R${String.format(Locale.US, "%.2f", srv.price)}",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFFFD700)
+                        )
+                    }
                 }
 
                 // Categories
@@ -354,17 +412,49 @@ fun ServiceDetailsScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Add Review Button (only if user hasn't reviewed yet and is not the owner)
-                val currentUserId = auth.currentUser?.uid
-                if (currentUserId != null && currentUserId != srv.ownerUid && userReview == null) {
+                // SIMPLIFIED: Always show Add Review button if user is logged in and not the owner
+                // We'll handle the "already reviewed" case in the dialog
+                if (currentUserId != null && currentUserId != srv.ownerUid) {
                     Button(
-                        onClick = { showReviewDialog = true },
+                        onClick = {
+                            if (userReview != null) {
+                                // User already has a review - show edit option
+                                Toast.makeText(context, "You've already reviewed this service", Toast.LENGTH_SHORT).show()
+                                // Optionally, you could open the dialog with their existing review pre-filled
+                                userRating = userReview!!.rating
+                                userComment = userReview!!.comment
+                                showReviewDialog = true
+                            } else {
+                                // New review
+                                userRating = 0
+                                userComment = ""
+                                showReviewDialog = true
+                            }
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700))
                     ) {
-                        Text("Add Review", color = Color.Black, fontWeight = FontWeight.Bold)
+                        Text(
+                            if (userReview != null) "Edit Your Review" else "Add Review",
+                            color = Color.Black,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                } else if (currentUserId == null) {
+                    // User not logged in
+                    Button(
+                        onClick = {
+                            Toast.makeText(context, "Please log in to leave a review", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7F5A83))
+                    ) {
+                        Text("Log In to Review", color = Color.White, fontWeight = FontWeight.Bold)
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                 }
@@ -436,27 +526,6 @@ fun ServiceDetailsScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                OutlinedTextField(
-                    value = bookingMessage,
-                    onValueChange = { bookingMessage = it },
-                    label = { Text("Message to provider", color = Color.White) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedLabelColor = Color.White.copy(alpha = 0.8f),
-                        unfocusedLabelColor = Color.White.copy(alpha = 0.6f),
-                        focusedIndicatorColor = Color(0xFFFFD700),
-                        unfocusedIndicatorColor = Color.White.copy(alpha = 0.5f)
-                    )
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -465,15 +534,19 @@ fun ServiceDetailsScreen(
                 ) {
                     Button(
                         onClick = {
-                            val customerId = auth.currentUser?.uid ?: return@Button
+                            if (currentUserId == null) {
+                                Toast.makeText(context, "Please log in to book services", Toast.LENGTH_SHORT).show()
+                                return@Button
+                            }
+
                             val booking = com.example.grindsphere.models.Booking(
                                 serviceId = srv.id,
                                 serviceName = srv.name,
-                                customerId = customerId,
-                                customerName = auth.currentUser?.displayName ?: "",
+                                customerId = currentUserId,
+                                customerName = currentUserName,
                                 hustlerId = srv.ownerUid,
                                 hustlerName = srv.ownerName,
-                                message = bookingMessage,
+                                message = "I'm interested in your service!",
                                 price = srv.price
                             )
                             firestore.collection("bookingRequests")
@@ -482,8 +555,8 @@ fun ServiceDetailsScreen(
                                     Toast.makeText(context, "Booking requested!", Toast.LENGTH_SHORT).show()
                                     navController.navigate("bookings")
                                 }
-                                .addOnFailureListener {
-                                    Toast.makeText(context, "Failed to book.", Toast.LENGTH_SHORT).show()
+                                .addOnFailureListener { e ->
+                                    Toast.makeText(context, "Failed to book: ${e.message}", Toast.LENGTH_SHORT).show()
                                 }
                         },
                         modifier = Modifier.weight(1f),
@@ -494,8 +567,12 @@ fun ServiceDetailsScreen(
 
                     OutlinedButton(
                         onClick = {
-                            val currentUserId = auth.currentUser?.uid
-                            if (currentUserId == null || srv.ownerUid.isEmpty()) return@OutlinedButton
+                            if (currentUserId == null) {
+                                Toast.makeText(context, "Please log in to message providers", Toast.LENGTH_SHORT).show()
+                                return@OutlinedButton
+                            }
+
+                            if (srv.ownerUid.isEmpty()) return@OutlinedButton
 
                             firestore.collection("conversations")
                                 .whereEqualTo("serviceId", srv.id)
@@ -509,7 +586,7 @@ fun ServiceDetailsScreen(
                                         val newConversation = com.example.grindsphere.models.Conversation(
                                             participants = listOf(currentUserId, srv.ownerUid),
                                             participantNames = mapOf(
-                                                currentUserId to (auth.currentUser?.displayName ?: "Customer"),
+                                                currentUserId to currentUserName,
                                                 srv.ownerUid to srv.ownerName
                                             ),
                                             serviceId = srv.id,
@@ -521,7 +598,13 @@ fun ServiceDetailsScreen(
                                             .addOnSuccessListener { docRef ->
                                                 navController.navigate("chat/${docRef.id}")
                                             }
+                                            .addOnFailureListener { e ->
+                                                Toast.makeText(context, "Failed to start conversation: ${e.message}", Toast.LENGTH_SHORT).show()
+                                            }
                                     }
+                                }
+                                .addOnFailureListener { e ->
+                                    Toast.makeText(context, "Failed to find conversation: ${e.message}", Toast.LENGTH_SHORT).show()
                                 }
                         },
                         modifier = Modifier.weight(1f),
@@ -540,65 +623,108 @@ fun ServiceDetailsScreen(
         // Review Dialog
         if (showReviewDialog) {
             AlertDialog(
-                onDismissRequest = { showReviewDialog = false },
-                title = { Text("Add Review", color = Color.Black) },
+                onDismissRequest = {
+                    showReviewDialog = false
+                    userRating = 0
+                    userComment = ""
+                },
+                title = {
+                    Text(
+                        if (userReview != null) "Edit Your Review" else "Add Review",
+                        color = Color.Black
+                    )
+                },
                 text = {
                     Column {
                         Text("Rating:", color = Color.Black, modifier = Modifier.padding(bottom = 8.dp))
                         StarRating(
-                            rating = userRating.roundToInt(),
-                            onRatingChange = { userRating = it.toFloat() }
+                            rating = userRating,
+                            onRatingChange = { newRating ->
+                                userRating = newRating
+                            },
+                            interactive = true,
+                            starSize = 32.dp
                         )
 
                         Spacer(modifier = Modifier.height(16.dp))
 
+                        Text(
+                            "Comment:",
+                            color = Color.Black,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+
                         TextField(
                             value = userComment,
                             onValueChange = { userComment = it },
-                            label = { Text("Comment") },
-                            modifier = Modifier.fillMaxWidth(),
-                            maxLines = 3
+                            placeholder = { Text("Share your experience...") },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp),
+                            maxLines = 4
                         )
                     }
                 },
                 confirmButton = {
                     Button(
                         onClick = {
-                            if (userRating > 0) {
-                                val currentUser = auth.currentUser
-                                if (currentUser != null) {
-                                    val reviewData = hashMapOf(
-                                        "serviceId" to serviceId,
-                                        "userId" to currentUser.uid,
-                                        "userName" to (currentUser.displayName ?: "Customer"),
-                                        "rating" to userRating.toInt(),
-                                        "comment" to userComment,
-                                        "timestamp" to System.currentTimeMillis()
-                                    )
+                            if (userRating == 0) {
+                                Toast.makeText(context, "Please select a rating", Toast.LENGTH_SHORT).show()
+                                return@Button
+                            }
 
-                                    firestore.collection("reviews").add(reviewData)
-                                        .addOnSuccessListener {
-                                            Toast.makeText(context, "Review added!", Toast.LENGTH_SHORT).show()
-                                            showReviewDialog = false
-                                            userRating = 0f
-                                            userComment = ""
-                                        }
-                                        .addOnFailureListener {
-                                            Toast.makeText(context, "Failed to add review", Toast.LENGTH_SHORT).show()
-                                        }
-                                }
+                            if (currentUserId == null) {
+                                Toast.makeText(context, "Please log in to leave a review", Toast.LENGTH_SHORT).show()
+                                return@Button
+                            }
+
+                            val reviewData = hashMapOf(
+                                "serviceId" to serviceId,
+                                "userId" to currentUserId,
+                                "userName" to currentUserName,
+                                "rating" to userRating,
+                                "comment" to userComment,
+                                "timestamp" to System.currentTimeMillis()
+                            )
+
+                            if (userReview != null) {
+                                // Update existing review
+                                firestore.collection("reviews").document(userReview!!.id)
+                                    .set(reviewData)
+                                    .addOnSuccessListener {
+                                        Toast.makeText(context, "Review updated successfully!", Toast.LENGTH_SHORT).show()
+                                        showReviewDialog = false
+                                    }
+                                    .addOnFailureListener { e ->
+                                        Toast.makeText(context, "Failed to update review: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    }
                             } else {
-                                Toast.makeText(context, "Please add a rating", Toast.LENGTH_SHORT).show()
+                                // Add new review
+                                firestore.collection("reviews").add(reviewData)
+                                    .addOnSuccessListener {
+                                        Toast.makeText(context, "Review added successfully!", Toast.LENGTH_SHORT).show()
+                                        showReviewDialog = false
+                                    }
+                                    .addOnFailureListener { e ->
+                                        Toast.makeText(context, "Failed to add review: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    }
                             }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7F5A83))
                     ) {
-                        Text("Submit", color = Color.White)
+                        Text(
+                            if (userReview != null) "Update Review" else "Submit Review",
+                            color = Color.White
+                        )
                     }
                 },
                 dismissButton = {
                     TextButton(
-                        onClick = { showReviewDialog = false }
+                        onClick = {
+                            showReviewDialog = false
+                            userRating = 0
+                            userComment = ""
+                        }
                     ) {
                         Text("Cancel", color = Color(0xFF7F5A83))
                     }
