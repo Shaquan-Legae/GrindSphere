@@ -29,6 +29,10 @@ import com.example.grindsphere.hustler.HustlerDashboardActivity
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlin.collections.listOf
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
+
 
 @Composable
 fun GrindSphereLogin(isPreview: Boolean = false, onNavigateToSignup: () -> Unit) {
@@ -42,8 +46,7 @@ fun GrindSphereLogin(isPreview: Boolean = false, onNavigateToSignup: () -> Unit)
     val auth: FirebaseAuth? = if (!isPreview) FirebaseAuth.getInstance() else null
     val firestore: FirebaseFirestore? = if (!isPreview) FirebaseFirestore.getInstance() else null
 
-    // List of admin emails
-    val adminEmails = listOf("admin@example.com", "sihle.banda@admin.com") // Added a second example
+    val coroutineScope = rememberCoroutineScope()
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -88,7 +91,8 @@ fun GrindSphereLogin(isPreview: Boolean = false, onNavigateToSignup: () -> Unit)
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
-                label = { Text("Password") },
+                label = { 
+                    Text("Password") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -119,53 +123,42 @@ fun GrindSphereLogin(isPreview: Boolean = false, onNavigateToSignup: () -> Unit)
 
             Button(
                 onClick = {
-                    if (!isPreview) { // Skip Firebase in preview
-                        if (email.isNotEmpty() && password.isNotEmpty()) {
-                            loading = true
-                            auth?.signInWithEmailAndPassword(email, password)
-                                ?.addOnCompleteListener { task ->
-                                    if (task.isSuccessful) {
-                                        // --- NEW: Admin check logic ---
-                                        if (email in adminEmails) {
-                                            loading = false
-                                            Toast.makeText(context, "Admin login successful!", Toast.LENGTH_SHORT).show()
-                                            // You need to create AdminDashboardActivity
-                                            // val intent = Intent(context, AdminDashboardActivity::class.java)
-                                            // context.startActivity(intent)
+                    if (email.isNotEmpty() && password.isNotEmpty()) {
+                        loading = true
+                        coroutineScope.launch {
+                            try {
+                                val authResult = auth?.signInWithEmailAndPassword(email, password)?.await()
+                                val user = authResult?.user
+                                if (user != null) {
+                                    val document = firestore?.collection("users")?.document(user.uid)?.get()?.await()
+                                    if (document != null && document.exists()) {
+                                        val role = document.getString("role")
+                                        val destination = when (role) {
+                                            "HUSTLER" -> HustlerDashboardActivity::class.java
+                                            "CUSTOMER" -> CustomerDashboardActivity::class.java
+                                            else -> null
+                                        }
+                                        if (destination != null) {
+                                            Toast.makeText(context, "Login successful!", Toast.LENGTH_SHORT).show()
+                                            context.startActivity(Intent(context, destination))
                                         } else {
-                                            // Regular user role check
-                                            val user = auth.currentUser
-                                            if (user != null) {
-                                                firestore?.collection("users")?.document(user.uid)?.get()
-                                                    ?.addOnSuccessListener { document ->
-                                                        loading = false
-                                                        if (document != null && document.exists()) {
-                                                            val role = document.getString("role")
-                                                            val destination = when (role) {
-                                                                "HUSTLER" -> HustlerDashboardActivity::class.java
-                                                                "CUSTOMER" -> CustomerDashboardActivity::class.java
-                                                                else -> MainActivity::class.java // Fallback
-                                                            }
-                                                            Toast.makeText(context, "Login successful!", Toast.LENGTH_SHORT).show()
-                                                            context.startActivity(Intent(context, destination))
-                                                        } else {
-                                                            Toast.makeText(context, "Error: User data not found", Toast.LENGTH_SHORT).show()
-                                                        }
-                                                    }
-                                                    ?.addOnFailureListener { e ->
-                                                        loading = false
-                                                        Toast.makeText(context, "Firestore Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                                                    }
-                                            }
+                                            Toast.makeText(context, "Invalid role for this user.", Toast.LENGTH_SHORT).show()
                                         }
                                     } else {
-                                        loading = false
-                                        Toast.makeText(context, "Authentication failed: ${task.exception?.message}", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Error: User data not found", Toast.LENGTH_SHORT).show()
                                     }
                                 }
-                        } else {
-                            Toast.makeText(context, "Please fill in all fields", Toast.LENGTH_SHORT).show()
+                            } catch (e: Exception) {
+                                if (e is CancellationException) {
+                                    throw e // Rethrow cancellation exceptions
+                                }
+                                Toast.makeText(context, "Authentication failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                            } finally {
+                                loading = false
+                            }
                         }
+                    } else {
+                        Toast.makeText(context, "Please fill in all fields", Toast.LENGTH_SHORT).show()
                     }
                 },
                 modifier = Modifier
