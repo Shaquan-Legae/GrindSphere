@@ -36,6 +36,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import com.example.grindsphere.models.Review
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -137,15 +138,7 @@ fun ServiceDetailScreen(serviceId: String?) {
                     if (error != null) return@addSnapshotListener
 
                     reviews = snapshot?.documents?.map { doc ->
-                        Review(
-                            id = doc.id,
-                            serviceId = doc.getString("serviceId") ?: "",
-                            userId = doc.getString("userId") ?: "",
-                            userName = doc.getString("userName") ?: "",
-                            rating = (doc.getLong("rating") ?: 0L).toInt(),
-                            comment = doc.getString("comment") ?: "",
-                            timestamp = doc.getLong("timestamp") ?: 0L
-                        )
+                        doc.toObject(Review::class.java)!!.copy(id = doc.id)
                     } ?: listOf()
 
                     // Calculate average rating
@@ -915,15 +908,7 @@ private fun checkUserReview(
         .get()
         .addOnSuccessListener { snapshot ->
             val review = snapshot.documents.firstOrNull()?.let { doc ->
-                Review(
-                    id = doc.id,
-                    serviceId = doc.getString("serviceId") ?: "",
-                    userId = doc.getString("userId") ?: "",
-                    userName = doc.getString("userName") ?: "",
-                    rating = (doc.getLong("rating") ?: 0L).toInt(),
-                    comment = doc.getString("comment") ?: "",
-                    timestamp = doc.getLong("timestamp") ?: 0L
-                )
+                doc.toObject(Review::class.java)!!.copy(id = doc.id)
             }
             onResult(review)
         }

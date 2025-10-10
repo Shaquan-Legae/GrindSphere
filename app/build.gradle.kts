@@ -94,4 +94,7 @@ dependencies {
     implementation("com.google.accompanist:accompanist-systemuicontroller:0.30.1")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3") // Or the latest version
+
+    implementation("com.github.skydoves:landscapist-coil:2.2.10")
+    implementation("com.github.skydoves:landscapist-transformation:2.2.10")
 }

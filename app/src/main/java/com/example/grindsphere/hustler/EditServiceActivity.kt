@@ -72,8 +72,8 @@ fun EditServiceScreen(serviceId: String?) {
 
     // categories
     val categoriesList = listOf(
-        "Tutoring", "Design", "Tech Support", "Photography",
-        "Fashion", "Food", "Music", "Fitness", "Transport", "Nails", "Hair", "Beauty", "Cake", "DJ"
+        "Tutoring", "Design", "Tech Support", "Photography", "Other", "Art", "Technology", "Printing",
+        "Fashion", "Food", "Music", "Fitness", "Transport", "Nails", "Hair", "Beauty", "Cake", "DJ", "Selling"
     )
     var selectedCategories by remember { mutableStateOf(listOf<String>()) }
 
@@ -335,7 +335,7 @@ fun EditServiceScreen(serviceId: String?) {
                                 contentScale = ContentScale.Crop
                             )
                         }
-                    }
+                     }
 
                     item {
                         Box(
