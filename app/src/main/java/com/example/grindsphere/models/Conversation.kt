@@ -11,10 +11,10 @@ import java.util.Date
 data class Conversation(
     val id: String = "",
     val participants: List<String> = emptyList(),
-    val participantNames: Map<String, String> = emptyMap(),
-    val serviceId: String = "",
-    val serviceName: String = "",
+    val participantNames: Map<String, String> = emptyMap(), // This should exist
     val lastMessage: String = "",
-    @ServerTimestamp
-    val lastMessageTimestamp: Date? = null
+    val lastMessageTimestamp: Any? = null, // Could be Timestamp, Date, or Long
+    val serviceName: String = "",
+    val bookingId: String? = null, // ADD THIS if missing
+    val createdAt: Any? = null
 )

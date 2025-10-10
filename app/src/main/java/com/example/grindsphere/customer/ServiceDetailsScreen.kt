@@ -38,6 +38,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
+import com.example.grindsphere.hustler.MessageBookingManager
 import com.example.grindsphere.hustler.ReviewItem
 import com.example.grindsphere.hustler.StarRating
 import com.example.grindsphere.models.Review
@@ -251,7 +252,6 @@ fun ServiceDetailsScreen(
                         )
                     )
             ) {
-                // ... (keep all the existing banner, profile, info sections the same) ...
                 // Banner image
                 Box(
                     modifier = Modifier
@@ -484,7 +484,7 @@ fun ServiceDetailsScreen(
                         }
                     }
                 }
-                // ... (keep all the existing reviews section the same) ...
+
                 // Reviews Section
                 Text(
                     "Reviews (${reviews.size})",
@@ -587,18 +587,7 @@ fun ServiceDetailsScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Booking Section - REPLACE THIS ENTIRE SECTION with the new version below
-                Text(
-                    "Book This Service",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // REPLACE THIS ROW with the new action buttons that include favorite
+                // Action Buttons Section - REPLACED with simple message button
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -607,50 +596,28 @@ fun ServiceDetailsScreen(
                 ) {
                     Button(
                         onClick = {
-                            val booking = com.example.grindsphere.models.Booking(
+                            // Direct message without booking
+                            MessageBookingManager.createBookingWithConversation(
+                                context = context,
                                 serviceId = srv.id,
                                 serviceName = srv.name,
-                                customerId = currentUserId,
-                                customerName = currentUserName,
                                 hustlerId = srv.ownerUid,
-                                hustlerName = srv.ownerName,
-                                message = "I'm interested in your service!",
-                                price = srv.price
+                                customerMessage = "Hello, I'm interested in your service!",
+                                onSuccess = { _, conversationId ->
+                                    navController.navigate("chat/$conversationId")
+                                }
                             )
-                            firestore.collection("bookingRequests")
-                                .add(booking)
-                                .addOnSuccessListener {
-                                    Toast.makeText(
-                                        context,
-                                        "Booking requested!",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                    navController.navigate("bookings")
-                                }
-                                .addOnFailureListener { e ->
-                                    Toast.makeText(
-                                        context,
-                                        "Failed to book: ${e.message}",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
                         },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700))
                     ) {
-                        Text("Book Now", color = Color.Black, fontWeight = FontWeight.Bold)
+                        Text("Message Provider", color = Color.Black, fontWeight = FontWeight.Bold)
                     }
 
-                    // ADD THIS: Favorite Button
-                    // In the action buttons row, update the IconButton:
+                    // Favorite Button
                     IconButton(
                         onClick = {
-                            toggleFavorite(
-                                srv.id,
-                                currentUserId,
-                                firestore,
-                                context
-                            )
+                            toggleFavorite(srv.id, currentUserId, firestore, context)
                         },
                         modifier = Modifier
                             .size(56.dp)
@@ -667,142 +634,141 @@ fun ServiceDetailsScreen(
                             modifier = Modifier.size(24.dp)
                         )
                     }
-
-                    Spacer(modifier = Modifier.height(32.dp))
                 }
-            }
 
-            // ... (keep the existing review dialog the same) ...
-            // Review Dialog
-            if (showReviewDialog) {
-                AlertDialog(
-                    onDismissRequest = {
-                        showReviewDialog = false
-                        userRating = 0
-                        userComment = ""
-                    },
-                    title = {
+                Spacer(modifier = Modifier.height(32.dp))
+            }
+        }
+
+        // Review Dialog
+        if (showReviewDialog) {
+            AlertDialog(
+                onDismissRequest = {
+                    showReviewDialog = false
+                    userRating = 0
+                    userComment = ""
+                },
+                title = {
+                    Text(
+                        if (userReview != null) "Edit Your Review" else "Add Review",
+                        color = Color.Black
+                    )
+                },
+                text = {
+                    Column {
                         Text(
-                            if (userReview != null) "Edit Your Review" else "Add Review",
-                            color = Color.Black
+                            "Rating:",
+                            color = Color.Black,
+                            modifier = Modifier.padding(bottom = 8.dp)
                         )
-                    },
-                    text = {
-                        Column {
-                            Text(
-                                "Rating:",
-                                color = Color.Black,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            )
-                            StarRating(
-                                rating = userRating,
-                                onRatingChange = { newRating ->
-                                    userRating = newRating
-                                },
-                                interactive = true,
-                                starSize = 32.dp
-                            )
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            Text(
-                                "Comment:",
-                                color = Color.Black,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            )
-
-                            TextField(
-                                value = userComment,
-                                onValueChange = { userComment = it },
-                                placeholder = { Text("Share your experience...") },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(120.dp),
-                                maxLines = 4
-                            )
-                        }
-                    },
-                    confirmButton = {
-                        Button(
-                            onClick = {
-                                if (userRating == 0) {
-                                    Toast.makeText(
-                                        context,
-                                        "Please select a rating",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                    return@Button
-                                }
-
-                                val reviewData = hashMapOf(
-                                    "serviceId" to serviceId,
-                                    "userId" to currentUserId,
-                                    "userName" to currentUserName,
-                                    "rating" to userRating,
-                                    "comment" to userComment,
-                                    "timestamp" to System.currentTimeMillis()
-                                )
-
-                                if (userReview != null) {
-                                    // Update existing review
-                                    firestore.collection("reviews").document(userReview!!.id)
-                                        .set(reviewData)
-                                        .addOnSuccessListener {
-                                            Toast.makeText(
-                                                context,
-                                                "Review updated successfully!",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                            showReviewDialog = false
-                                        }
-                                        .addOnFailureListener { e ->
-                                            Toast.makeText(
-                                                context,
-                                                "Failed to update review: ${e.message}",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-                                } else {
-                                    // Add new review
-                                    firestore.collection("reviews").add(reviewData)
-                                        .addOnSuccessListener {
-                                            Toast.makeText(
-                                                context,
-                                                "Review added successfully!",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                            showReviewDialog = false
-                                        }
-                                        .addOnFailureListener { e ->
-                                            Toast.makeText(
-                                                context,
-                                                "Failed to add review: ${e.message}",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-                                }
+                        StarRating(
+                            rating = userRating,
+                            onRatingChange = { newRating ->
+                                userRating = newRating
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7F5A83))
-                        ) {
-                            Text(
-                                if (userReview != null) "Update Review" else "Submit Review",
-                                color = Color.White
-                            )
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(
-                            onClick = {
-                                showReviewDialog = false
-                                userRating = 0
-                                userComment = ""
-                            }
-                        ) {
-                            Text("Cancel", color = Color(0xFF7F5A83))
-                        }
+                            interactive = true,
+                            starSize = 32.dp
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Text(
+                            "Comment:",
+                            color = Color.Black,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+
+                        TextField(
+                            value = userComment,
+                            onValueChange = { userComment = it },
+                            placeholder = { Text("Share your experience...") },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp),
+                            maxLines = 4
+                        )
                     }
-                )
-            }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (userRating == 0) {
+                                Toast.makeText(
+                                    context,
+                                    "Please select a rating",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                return@Button
+                            }
+
+                            val reviewData = hashMapOf(
+                                "serviceId" to serviceId,
+                                "userId" to currentUserId,
+                                "userName" to currentUserName,
+                                "rating" to userRating,
+                                "comment" to userComment,
+                                "timestamp" to System.currentTimeMillis()
+                            )
+
+                            if (userReview != null) {
+                                // Update existing review
+                                firestore.collection("reviews").document(userReview!!.id)
+                                    .set(reviewData)
+                                    .addOnSuccessListener {
+                                        Toast.makeText(
+                                            context,
+                                            "Review updated successfully!",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                        showReviewDialog = false
+                                    }
+                                    .addOnFailureListener { e ->
+                                        Toast.makeText(
+                                            context,
+                                            "Failed to update review: ${e.message}",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                            } else {
+                                // Add new review
+                                firestore.collection("reviews").add(reviewData)
+                                    .addOnSuccessListener {
+                                        Toast.makeText(
+                                            context,
+                                            "Review added successfully!",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                        showReviewDialog = false
+                                    }
+                                    .addOnFailureListener { e ->
+                                        Toast.makeText(
+                                            context,
+                                            "Failed to add review: ${e.message}",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7F5A83))
+                    ) {
+                        Text(
+                            if (userReview != null) "Update Review" else "Submit Review",
+                            color = Color.White
+                        )
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showReviewDialog = false
+                            userRating = 0
+                            userComment = ""
+                        }
+                    ) {
+                        Text("Cancel", color = Color(0xFF7F5A83))
+                    }
+                }
+            )
         }
     } ?: Box(
         modifier = Modifier.fillMaxSize(),
@@ -810,7 +776,6 @@ fun ServiceDetailsScreen(
     ) {
         Text("Service not found.", color = Color.White)
     }
-
 }
 
 @OptIn(ExperimentalFoundationApi::class)

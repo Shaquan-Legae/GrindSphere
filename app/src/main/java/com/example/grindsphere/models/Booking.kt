@@ -13,10 +13,10 @@ data class Booking(
     val serviceName: String = "",
     val customerId: String = "",
     val customerName: String = "",
+    val customerEmail: String = "", // ADD THIS if missing
     val hustlerId: String = "",
     val hustlerName: String = "",
     val status: String = "pending", // pending, accepted, declined, completed
-    @ServerTimestamp
     val timestamp: Date? = null,
     val message: String = "",
     val price: Double = 0.0

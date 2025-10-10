@@ -2,8 +2,10 @@
 
 package com.example.grindsphere.customer
 
+import android.content.ContentValues.TAG
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -16,9 +18,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -39,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
@@ -48,6 +53,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import coil.compose.rememberAsyncImagePainter
 import com.example.grindsphere.LoginActivity
+import com.example.grindsphere.hustler.ChatScreen
+import com.example.grindsphere.hustler.MessageBubble
 import com.example.grindsphere.models.Booking
 import com.example.grindsphere.models.Conversation
 import com.example.grindsphere.models.Message
@@ -56,8 +63,11 @@ import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.toObject
 import com.google.firebase.storage.FirebaseStorage
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -91,7 +101,6 @@ fun CustomerDashboardScreen() {
                     .padding(padding)
             ) {
                 composable("services") { ServicesScreen(navController) }
-                composable("bookings") { BookingsScreen() }
                 composable("conversations") { ConversationsScreen(navController) }
                 composable("profile") { CustomerProfileScreen(navController) }
                 composable("serviceDetails/{serviceId}") { backStackEntry ->
@@ -101,9 +110,11 @@ fun CustomerDashboardScreen() {
                 composable("chat/{conversationId}") { backStackEntry ->
                     val conversationId = backStackEntry.arguments?.getString("conversationId")
                     if (conversationId != null) {
-                        ChatScreen(conversationId = conversationId)
+                        CustomerChatScreen(
+                            conversationId = conversationId,
+                            onBack = { navController.popBackStack() }
+                        )
                     } else {
-                        // Handle the case where conversationId is null
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text("Error: No conversation ID")
                         }
@@ -119,6 +130,23 @@ fun CustomerBottomNavigation(navController: NavHostController) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: "services"
 
+    var unreadMessagesCount by remember { mutableIntStateOf(0) }
+    val auth = FirebaseAuth.getInstance()
+    val firestore = FirebaseFirestore.getInstance()
+
+    // Load unread messages count
+    LaunchedEffect(auth.currentUser?.uid) {
+        auth.currentUser?.uid?.let { uid ->
+            firestore.collection("conversations")
+                .whereArrayContains("participants", uid)
+                .addSnapshotListener { snapshot, _ ->
+                    // You'll need to implement proper unread count logic here
+                    // For now, we'll just show if there are any conversations
+                    unreadMessagesCount = snapshot?.size() ?: 0
+                }
+        }
+    }
+
     NavigationBar(
         containerColor = Color.White
     ) {
@@ -128,14 +156,21 @@ fun CustomerBottomNavigation(navController: NavHostController) {
             selected = currentRoute == "services",
             onClick = { navController.navigate("services") }
         )
+
         NavigationBarItem(
-            icon = { Icon(Icons.AutoMirrored.Filled.ListAlt, contentDescription = "Bookings") },
-            label = { Text("Bookings") },
-            selected = currentRoute == "bookings",
-            onClick = { navController.navigate("bookings") }
-        )
-        NavigationBarItem(
-            icon = { Icon(Icons.Filled.Email, contentDescription = "Messages") },
+            icon = {
+                BadgedBox(
+                    badge = {
+                        if (unreadMessagesCount > 0) {
+                            Badge {
+                                Text(unreadMessagesCount.toString())
+                            }
+                        }
+                    }
+                ) {
+                    Icon(Icons.Filled.Email, contentDescription = "Messages")
+                }
+            },
             label = { Text("Messages") },
             selected = currentRoute == "conversations",
             onClick = { navController.navigate("conversations") }
@@ -842,121 +877,6 @@ fun ServiceCardSmall(
     }
 }
 
-@Composable
-fun BookingsScreen() {
-    var bookings by remember { mutableStateOf<List<Booking>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-    val firestore = FirebaseFirestore.getInstance()
-    val auth = FirebaseAuth.getInstance()
-
-    LaunchedEffect(Unit) {
-        val currentUserId = auth.currentUser?.uid
-        if (currentUserId == null) {
-            isLoading = false; return@LaunchedEffect
-        }
-        firestore.collection("bookingRequests")
-            .whereEqualTo("customerId", currentUserId)
-            .get()
-            .addOnSuccessListener { result ->
-                bookings = result.documents.mapNotNull { doc ->
-                    doc.toObject<Booking>()?.copy(id = doc.id)
-                }
-                isLoading = false
-            }
-            .addOnFailureListener { isLoading = false }
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(Color(0xFF0D324D), Color(0xFF7F5A83))))
-            .padding(16.dp)
-    ) {
-        Text(
-            "My Bookings",
-            style = MaterialTheme.typography.headlineSmall,
-            color = Color.White,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-
-        if (isLoading) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Color.White)
-            }
-        } else if (bookings.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("You have no bookings yet.", color = Color.White)
-            }
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                items(bookings, key = { it.id }) { booking ->
-                    BookingCard(booking = booking)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun BookingCard(booking: Booking) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.15f))
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    booking.serviceName,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-                StatusBadge(status = booking.status)
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Provider: ${booking.hustlerName}", style = MaterialTheme.typography.bodyMedium, color = Color.White)
-            booking.timestamp?.let {
-                Text(
-                    "Date: ${SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()).format(it)}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White
-                )
-            }
-
-            }
-        }
-    }
-
-
-@Composable
-fun StatusBadge(status: String) {
-    val (backgroundColor, textColor) = when (status.lowercase(Locale.ROOT)) {
-        "accepted" -> Color.Green.copy(alpha = 0.2f) to Color.Black.copy(alpha = 0.9f)
-        "declined" -> Color.Red.copy(alpha = 0.2f) to Color.Black.copy(alpha = 0.9f)
-        "completed" -> Color.Blue.copy(alpha = 0.2f) to Color.Black.copy(alpha = 0.9f)
-        "pending" -> Color.Yellow.copy(alpha = 0.3f) to Color.Black
-        else -> Color.Gray.copy(alpha = 0.2f) to Color.Black
-    }
-
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(backgroundColor)
-            .padding(horizontal = 10.dp, vertical = 4.dp)
-    ) {
-        Text(
-            text = status.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() },
-            color = textColor,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Medium
-        )
-    }
-}
 
 @Composable
 fun CustomerProfileScreen(navController: NavHostController) {
@@ -1654,37 +1574,6 @@ fun ServiceCardPreview() {
 
 
 
-@Preview(showBackground = true)
-@Composable
-fun BookingCardPreview() {
-    val sampleBooking = Booking(
-        id = "1",
-        serviceId = "123",
-        serviceName = "Sample Service",
-        customerId = "456",
-        customerName = "Customer Name",
-        hustlerId = "789",
-        hustlerName = "Provider Name",
-        status = "pending",
-        timestamp = Date(),
-        message = "Please arrive by 2 PM",
-        price = 49.99
-    )
-    BookingCard(booking = sampleBooking)
-}
-
-@Preview(showBackground = true)
-@Composable
-fun StatusBadgePreview() {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        StatusBadge(status = "pending")
-        StatusBadge(status = "accepted")
-        StatusBadge(status = "declined")
-        StatusBadge(status = "completed")
-        StatusBadge(status = "unknown")
-    }
-}
-
 @Composable
 fun ConversationsScreen(navController: NavHostController) {
     var conversations by remember { mutableStateOf<List<Conversation>>(emptyList()) }
@@ -1759,120 +1648,486 @@ fun ConversationCard(conversation: Conversation, navController: NavHostControlle
     }
 }
 
-
+// Add this composable function to your CustomerDashboard.kt file
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen(conversationId: String) {
-    var messages by remember { mutableStateOf<List<Message>>(emptyList()) }
-    var messageText by remember { mutableStateOf("") } // This is the correct state variable
-    var isLoading by remember { mutableStateOf(true) }
+fun CustomerChatScreen(
+    conversationId: String,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
     val firestore = FirebaseFirestore.getInstance()
     val auth = FirebaseAuth.getInstance()
-    val currentUserId = auth.currentUser?.uid
+    val currentUser = auth.currentUser
 
-    // Function to send a message
-    fun onSendMessage(text: String) {
-        if (text.isBlank() || currentUserId == null) return
+    var messages by remember { mutableStateOf<List<Message>>(emptyList()) }
+    var messageText by remember { mutableStateOf("") }
+    var conversation by remember { mutableStateOf<Conversation?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var hustlerName by remember { mutableStateOf("Service Provider") }
+    var serviceName by remember { mutableStateOf("Service") }
+    var hustlerProfilePic by remember { mutableStateOf("") }
+    var currentUserProfilePic by remember { mutableStateOf("") }
+    var hustlerId by remember { mutableStateOf("") }
+    val scrollState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
 
-        val message = Message(
-            senderId = currentUserId,
-            text = text,
-            timestamp = Timestamp.now()
-        )
-
-        val conversationRef = firestore.collection("conversations").document(conversationId)
-
-        // Add message to the messages sub-collection
-        conversationRef.collection("messages").add(message)
-
-        // Update the last message in the parent conversation document
-        conversationRef.update(
-            "lastMessage", text,
-            "lastMessageTimestamp", FieldValue.serverTimestamp()
-        )
-    }
-
-    // Fetch messages
-    LaunchedEffect(conversationId) {
-        firestore.collection("conversations").document(conversationId)
-            .collection("messages")
-            .orderBy("timestamp")
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    isLoading = false
-                    return@addSnapshotListener
-                }
-                messages = snapshot?.documents?.mapNotNull { it.toObject<Message>() } ?: emptyList()
-                isLoading = false
-            }
-    }
-
-    Scaffold(
-        bottomBar = {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TextField(
-                    value = messageText,
-                    onValueChange = { messageText = it },
-                    placeholder = { Text("Type a message...") },
-                    modifier = Modifier.weight(1f)
-                )
-                IconButton(onClick = {
-                    if (messageText.isNotBlank()) {
-                        // FIX: Use the 'messageText' variable here
-                        onSendMessage(messageText)
-                        // Also, clear the input field after sending
-                        messageText = ""
-                    }
-                }) {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send Message")
-                }
-            }
+    // Show error toast when errorMessage changes
+    LaunchedEffect(errorMessage) {
+        errorMessage?.let { message ->
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            errorMessage = null
         }
-    ) { paddingValues ->
-        if (isLoading) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(horizontal = 8.dp),
-                reverseLayout = true // Show latest messages at the bottom
-            ) {
-                items(messages.reversed()) { message ->
-                    // Basic message bubble layout
-                    val isSentByCurrentUser = message.senderId == currentUserId
-                    Box(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = if (isSentByCurrentUser) Alignment.CenterEnd else Alignment.CenterStart
-                    ) {
-                        Card(
-                            modifier = Modifier
-                                .padding(vertical = 4.dp)
-                                .widthIn(max = 300.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (isSentByCurrentUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer
-                            )
-                        ) {
-                            Column(modifier = Modifier.padding(8.dp)) {
-                                Text(text = message.text)
-                                Text(
-                                    text = SimpleDateFormat("h:mm a", Locale.getDefault()).format(message.timestamp.toDate()),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    modifier = Modifier.align(Alignment.End)
-                                )
-                            }
+    }
+
+    // Load current user's profile picture
+    LaunchedEffect(currentUser?.uid) {
+        currentUser?.uid?.let { uid ->
+            firestore.collection("users").document(uid).get()
+                .addOnSuccessListener { doc ->
+                    currentUserProfilePic = doc.getString("profilePicUrl") ?: ""
+                }
+        }
+    }
+
+    // Load conversation details and extract hustler info
+    LaunchedEffect(conversationId) {
+        try {
+            firestore.collection("conversations").document(conversationId)
+                .addSnapshotListener { snapshot, error ->
+                    conversation = snapshot?.toObject<Conversation>()
+
+                    // Extract hustler info from participantNames
+                    val currentUserId = currentUser?.uid
+                    if (currentUserId != null && conversation != null) {
+                        // Find the other participant (the hustler)
+                        hustlerId = conversation!!.participants.find { it != currentUserId } ?: ""
+                        hustlerName = conversation!!.participantNames[hustlerId] ?: "Service Provider"
+                        serviceName = conversation!!.serviceName ?: "Service"
+
+                        // Load hustler's profile picture
+                        if (hustlerId.isNotEmpty()) {
+                            firestore.collection("users").document(hustlerId).get()
+                                .addOnSuccessListener { doc ->
+                                    hustlerProfilePic = doc.getString("profilePicUrl") ?: ""
+                                }
+                        }
+                    }
+
+                    loading = false
+                }
+        } catch (e: Exception) {
+            errorMessage = "Error loading conversation: ${e.message}"
+            loading = false
+        }
+    }
+
+    // Load messages
+    LaunchedEffect(conversationId) {
+        try {
+            firestore.collection("conversations")
+                .document(conversationId)
+                .collection("messages")
+                .orderBy("timestamp", Query.Direction.ASCENDING)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        Log.e(TAG, "Error loading messages: ${error.message}")
+                        return@addSnapshotListener
+                    }
+
+                    messages = snapshot?.documents?.mapNotNull { doc ->
+                        doc.toObject<Message>()?.copy(id = doc.id)
+                    } ?: emptyList()
+
+                    // Auto-scroll to bottom when new messages arrive
+                    if (messages.isNotEmpty()) {
+                        coroutineScope.launch {
+                            scrollState.animateScrollToItem(messages.size - 1)
                         }
                     }
                 }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error setting up messages listener: ${e.message}")
+        }
+    }
+
+    // Send message function
+    fun sendMessage() {
+        if (messageText.isBlank() || currentUser == null) return
+
+        coroutineScope.launch {
+            try {
+                // Get user name from Firestore
+                val userDoc = firestore.collection("users").document(currentUser.uid).get().await()
+                val userName = userDoc.getString("name") ?: "Customer"
+
+                val messageData = hashMapOf(
+                    "senderId" to currentUser.uid,
+                    "senderName" to userName,
+                    "senderProfilePicUrl" to currentUserProfilePic, // Add profile picture URL
+                    "text" to messageText,
+                    "timestamp" to Timestamp.now(),
+                    "type" to "text"
+                )
+
+                // Add message to subcollection
+                firestore.collection("conversations")
+                    .document(conversationId)
+                    .collection("messages")
+                    .add(messageData)
+                    .await()
+
+                // Update conversation last message
+                firestore.collection("conversations")
+                    .document(conversationId)
+                    .update(
+                        mapOf(
+                            "lastMessage" to messageText,
+                            "lastMessageTimestamp" to FieldValue.serverTimestamp()
+                        )
+                    )
+
+                messageText = ""
+
+            } catch (e: Exception) {
+                errorMessage = "Failed to send message: ${e.message}"
+                Log.e(TAG, "Failed to send message: ${e.message}", e)
             }
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Hustler profile picture in top bar
+                        if (hustlerProfilePic.isNotEmpty()) {
+                            Image(
+                                painter = rememberAsyncImagePainter(hustlerProfilePic),
+                                contentDescription = "Hustler Profile",
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF7F5A83)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    hustlerName.take(1).uppercase(),
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(hustlerName, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                serviceName,
+                                color = Color.White.copy(alpha = 0.7f),
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Color.White
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color(0xFF0D324D)
+                )
+            )
+        }
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color(0xFF0D324D),
+                            Color(0xFF7F5A83)
+                        )
+                    )
+                )
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // Messages list
+                if (loading) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(color = Color.White)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                "Loading messages...",
+                                color = Color.White.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                } else if (messages.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.Send,
+                                contentDescription = "No messages",
+                                tint = Color.White.copy(alpha = 0.5f),
+                                modifier = Modifier.size(64.dp)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                "No messages yet",
+                                color = Color.White,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                "Start the conversation with $hustlerName!",
+                                color = Color.White.copy(alpha = 0.7f),
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "Service: $serviceName",
+                                color = Color.White.copy(alpha = 0.5f),
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 16.dp),
+                        state = scrollState,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(vertical = 16.dp)
+                    ) {
+                        items(messages) { message ->
+                            MessageBubble(
+                                message = message,
+                                isMe = message.senderId == currentUser?.uid,
+                                currentUserProfilePic = currentUserProfilePic,
+                                otherUserProfilePic = hustlerProfilePic
+                            )
+                        }
+                    }
+                }
+
+                // Message input
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextField(
+                        value = messageText,
+                        onValueChange = { messageText = it },
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("Type a message...", color = Color.Gray) },
+                        shape = RoundedCornerShape(24.dp),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White,
+                            focusedTextColor = Color.Black,
+                            unfocusedTextColor = Color.Black,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent
+                        ),
+                        keyboardActions = KeyboardActions(onSend = { sendMessage() }),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    IconButton(
+                        onClick = { sendMessage() },
+                        enabled = messageText.isNotBlank(),
+                        modifier = Modifier
+                            .size(56.dp)
+                            .background(
+                                if (messageText.isNotBlank()) Color(0xFFFFD700)
+                                else Color.Gray.copy(alpha = 0.5f),
+                                CircleShape
+                            )
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Send",
+                            tint = if (messageText.isNotBlank()) Color.Black else Color.White
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MessageBubble(
+    message: Message,
+    isMe: Boolean,
+    currentUserProfilePic: String,
+    otherUserProfilePic: String
+) {
+    val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
+    val messageTime = timeFormat.format(message.timestamp.toDate())
+    val profilePicUrl = if (isMe) currentUserProfilePic else otherUserProfilePic
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start,
+        verticalAlignment = Alignment.Bottom
+    ) {
+        if (!isMe) {
+            // Profile picture for other user's messages (left side)
+            ProfilePicture(
+                profilePicUrl = profilePicUrl,
+                userName = message.senderName ?: "User",
+                size = 32.dp
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+        }
+
+        Column(
+            horizontalAlignment = if (isMe) Alignment.End else Alignment.Start,
+            modifier = Modifier.weight(1f)
+        ) {
+            // Sender name (only show for other user's messages)
+            if (!isMe) {
+                Text(
+                    text = message.senderName ?: "User",
+                    color = Color.White.copy(alpha = 0.8f),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(bottom = 2.dp)
+                )
+            }
+
+            Row(
+                horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                if (isMe) {
+                    // Timestamp for my messages (on left side of bubble)
+                    Text(
+                        text = messageTime,
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 10.sp,
+                        modifier = Modifier.padding(bottom = 12.dp, end = 8.dp)
+                    )
+                }
+
+                // Message bubble
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isMe) Color(0xFFFFD700) // Gold for current user
+                        else Color(0xFF7F5A83) // Purple for other user
+                    ),
+                    shape = RoundedCornerShape(
+                        topStart = if (isMe) 16.dp else 4.dp,
+                        topEnd = if (isMe) 4.dp else 16.dp,
+                        bottomStart = 16.dp,
+                        bottomEnd = 16.dp
+                    ),
+                    elevation = CardDefaults.cardElevation(2.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                    ) {
+                        // Message text
+                        Text(
+                            text = message.text,
+                            color = if (isMe) Color.Black else Color.White,
+                            fontSize = 16.sp,
+                            lineHeight = 20.sp
+                        )
+                    }
+                }
+
+                if (!isMe) {
+                    // Timestamp for other user's messages (on right side of bubble)
+                    Text(
+                        text = messageTime,
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 10.sp,
+                        modifier = Modifier.padding(bottom = 12.dp, start = 8.dp)
+                    )
+                }
+            }
+        }
+
+        if (isMe) {
+            // Profile picture for my messages (right side)
+            Spacer(modifier = Modifier.width(8.dp))
+            ProfilePicture(
+                profilePicUrl = profilePicUrl,
+                userName = message.senderName ?: "You",
+                size = 32.dp
+            )
+        }
+    }
+}
+
+// Reusable Profile Picture Component
+@Composable
+fun ProfilePicture(
+    profilePicUrl: String,
+    userName: String,
+    size: Dp = 40.dp
+) {
+    if (profilePicUrl.isNotEmpty()) {
+        Image(
+            painter = rememberAsyncImagePainter(profilePicUrl),
+            contentDescription = "Profile Picture",
+            modifier = Modifier
+                .size(size)
+                .clip(CircleShape),
+            contentScale = ContentScale.Crop
+        )
+    } else {
+        Box(
+            modifier = Modifier
+                .size(size)
+                .clip(CircleShape)
+                .background(Color(0xFF7F5A83)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                userName.take(1).uppercase(),
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = (size.value / 2).sp
+            )
         }
     }
 }

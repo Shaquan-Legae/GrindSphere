@@ -6,13 +6,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import com.google.firebase.firestore.FieldValue
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,7 +23,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.grindsphere.models.Booking
 import com.example.grindsphere.models.Conversation
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -48,14 +45,12 @@ fun MessagesScreen(
     val currentUser = auth.currentUser
 
     var conversations by remember { mutableStateOf<List<Conversation>>(emptyList()) }
-    var bookingRequests by remember { mutableStateOf<List<Booking>>(emptyList()) }
-    var showBookingRequests by remember { mutableStateOf(true) }
     var isLoading by remember { mutableStateOf(false) }
 
-    // Load conversations
+    // Load conversations only
     LaunchedEffect(currentUser?.uid) {
         currentUser?.uid?.let { uid ->
-            Log.d(TAG, "Loading data for user: $uid")
+            Log.d(TAG, "Loading conversations for user: $uid")
 
             firestore.collection("conversations")
                 .whereArrayContains("participants", uid)
@@ -91,42 +86,6 @@ fun MessagesScreen(
                     Log.d(TAG, "Loaded ${convos.size} conversations")
                     conversations = convos
                 }
-
-            firestore.collection("bookingRequests")
-                .whereEqualTo("hustlerId", uid)
-                .whereEqualTo("status", "pending")
-                .addSnapshotListener { snapshot, error ->
-                    if (error != null) {
-                        Log.e(TAG, "Error loading booking requests: ${error.message}", error)
-                        Toast.makeText(
-                            context,
-                            "Error loading requests: ${error.message}",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                        return@addSnapshotListener
-                    }
-
-                    val requests = snapshot?.documents?.mapNotNull { doc ->
-                        try {
-                            doc.toObject<Booking>()?.copy(id = doc.id)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Error parsing booking doc ${doc.id}: ${e.message}")
-                            null
-                        }
-                    }?.sortedByDescending {
-                        it.timestamp?.let { timestamp ->
-                            when (timestamp) {
-                                is Long -> timestamp
-                                is Date -> timestamp.time
-                                is Timestamp -> timestamp.toDate().time
-                                else -> 0L
-                            }
-                        } ?: 0L
-                    } ?: emptyList()
-
-                    Log.d(TAG, "Loaded ${requests.size} booking requests")
-                    bookingRequests = requests
-                }
         } ?: run {
             Log.e(TAG, "No current user found")
             Toast.makeText(context, "Please log in first", Toast.LENGTH_SHORT).show()
@@ -138,33 +97,14 @@ fun MessagesScreen(
             .fillMaxSize()
             .background(Brush.verticalGradient(listOf(Color(0xFF0D324D), Color(0xFF7F5A83))))
     ) {
-        // Header with tabs
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            TextButton(
-                onClick = { showBookingRequests = true },
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    "Connection Requests (${bookingRequests.size})",
-                    color = if (showBookingRequests) Color(0xFFFFD700) else Color.White
-                )
-            }
-
-            TextButton(
-                onClick = { showBookingRequests = false },
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    "Messages (${conversations.size})",
-                    color = if (!showBookingRequests) Color(0xFFFFD700) else Color.White
-                )
-            }
-        }
+        // Simple header without tabs
+        Text(
+            "Messages",
+            color = Color.White,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(16.dp)
+        )
 
         if (isLoading) {
             Box(
@@ -173,103 +113,6 @@ fun MessagesScreen(
             ) {
                 CircularProgressIndicator(color = Color.White)
             }
-        } else if (showBookingRequests) {
-            BookingRequestsSection(
-                bookingRequests = bookingRequests,
-                onAccept = { request ->
-                    Log.d(TAG, "Accepting booking request: ${request.id}")
-                    currentUser?.uid?.let { uid ->
-                        isLoading = true
-                        firestore.collection("bookingRequests").document(request.id)
-                            .update("status", "accepted")
-                            .addOnSuccessListener {
-                                Log.d(TAG, "Booking accepted, creating conversation...")
-                                createOrFindConversation(
-                                    firestore = firestore,
-                                    participant1 = uid,
-                                    participant2 = request.customerId,
-                                    serviceName = request.serviceName,
-                                    onSuccess = { conversationId ->
-                                        isLoading = false
-                                        Log.d(TAG, "Conversation created successfully: $conversationId")
-                                        Toast.makeText(context, "Connection accepted!", Toast.LENGTH_SHORT).show()
-                                    },
-                                    onError = { e ->
-                                        isLoading = false
-                                        Log.e(TAG, "Error creating conversation: ${e.message}", e)
-                                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                                    }
-                                )
-                            }
-                            .addOnFailureListener { e ->
-                                isLoading = false
-                                Log.e(TAG, "Error accepting booking: ${e.message}", e)
-                                Toast.makeText(context, "Error accepting: ${e.message}", Toast.LENGTH_SHORT).show()
-                            }
-                    } ?: run {
-                        Log.e(TAG, "No current user when accepting booking")
-                        Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
-                    }
-                },
-                onDecline = { request ->
-                    Log.d(TAG, "Declining booking request: ${request.id}")
-                    firestore.collection("bookingRequests").document(request.id)
-                        .update("status", "declined")
-                        .addOnSuccessListener {
-                            Log.d(TAG, "Booking declined successfully")
-                            Toast.makeText(context, "Connection declined", Toast.LENGTH_SHORT).show()
-                        }
-                        .addOnFailureListener { e ->
-                            Log.e(TAG, "Error declining booking: ${e.message}", e)
-                            Toast.makeText(context, "Error declining: ${e.message}", Toast.LENGTH_SHORT).show()
-                        }
-                },
-                onChat = { request ->
-                    Log.d(TAG, "Opening chat for booking request: ${request.id}")
-                    currentUser?.uid?.let { uid ->
-                        val customerId = request.customerId
-                        val customerName = request.customerName.ifBlank { "Customer" }
-
-                        if (customerId.isBlank()) {
-                            Log.e(TAG, "Invalid customer ID for request: ${request.id}")
-                            Toast.makeText(context, "Invalid customer ID", Toast.LENGTH_SHORT).show()
-                            return@let
-                        }
-
-                        Log.d(TAG, "Creating/finding conversation between $uid and $customerId")
-                        isLoading = true
-                        createOrFindConversation(
-                            firestore = firestore,
-                            participant1 = uid,
-                            participant2 = customerId,
-                            serviceName = request.serviceName,
-                            onSuccess = { conversationId ->
-                                isLoading = false
-                                if (conversationId.isNotBlank()) {
-                                    Log.d(TAG, "Opening chat with conversation: $conversationId")
-                                    try {
-                                        onOpenChat(conversationId, customerId, customerName)
-                                    } catch (e: Exception) {
-                                        Log.e(TAG, "Error in onOpenChat callback: ${e.message}", e)
-                                        Toast.makeText(context, "Error opening chat: ${e.message}", Toast.LENGTH_SHORT).show()
-                                    }
-                                } else {
-                                    Log.e(TAG, "Empty conversation ID received")
-                                    Toast.makeText(context, "Failed to create conversation", Toast.LENGTH_SHORT).show()
-                                }
-                            },
-                            onError = { e ->
-                                isLoading = false
-                                Log.e(TAG, "Error creating conversation: ${e.message}", e)
-                                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                            }
-                        )
-                    } ?: run {
-                        Log.e(TAG, "No current user when opening chat")
-                        Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            )
         } else {
             ConversationsSection(
                 conversations = conversations,
@@ -277,34 +120,6 @@ fun MessagesScreen(
                 onOpenChat = onOpenChat,
                 onStartNewChat = onStartNewChat
             )
-        }
-    }
-}
-
-@Composable
-fun BookingRequestsSection(
-    bookingRequests: List<Booking>,
-    onAccept: (Booking) -> Unit,
-    onDecline: (Booking) -> Unit,
-    onChat: (Booking) -> Unit
-) {
-    if (bookingRequests.isEmpty()) {
-        EmptyState(
-            icon = Icons.Default.Person,
-            title = "No connection requests yet",
-            subtitle = "When customers connect with your services, requests will appear here"
-        )
-    } else {
-        LazyColumn(modifier = Modifier.padding(16.dp)) {
-            items(bookingRequests) { request ->
-                BookingRequestItem(
-                    request = request,
-                    onAccept = { onAccept(request) },
-                    onDecline = { onDecline(request) },
-                    onChat = { onChat(request) }
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-            }
         }
     }
 }
@@ -389,89 +204,6 @@ fun EmptyState(
                 ) {
                     Text(it)
                 }
-            }
-        }
-    }
-}
-
-@Composable
-fun BookingRequestItem(
-    request: Booking,
-    onAccept: () -> Unit,
-    onDecline: () -> Unit,
-    onChat: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFD700).copy(alpha = 0.2f))
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        request.customerName,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
-                    )
-                    Text(
-                        "Service: ${request.serviceName}",
-                        color = Color.White.copy(alpha = 0.8f),
-                        fontSize = 14.sp
-                    )
-                    Text(
-                        "Message: ${request.message}",
-                        color = Color.White.copy(alpha = 0.7f),
-                        fontSize = 12.sp,
-                        maxLines = 2
-                    )
-                    request.timestamp?.let {
-                        Text(
-                            "Received: ${formatDateSafe(it)}",
-                            color = Color.White.copy(alpha = 0.6f),
-                            fontSize = 10.sp
-                        )
-                    }
-                }
-
-                // Action buttons
-                Row {
-                    IconButton(
-                        onClick = { onAccept() },
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.Chat,
-                            contentDescription = "Accept",
-                            tint = Color.Green
-                        )
-                    }
-                    IconButton(
-                        onClick = { onDecline() },
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Person,
-                            contentDescription = "Decline",
-                            tint = Color.Red
-                        )
-                    }
-                }
-            }
-
-            // Chat button
-            Button(
-                onClick = { onChat() },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7F5A83))
-            ) {
-                Text("Open Chat")
             }
         }
     }
@@ -610,9 +342,9 @@ private fun createNewConversation(
     val newConvo = hashMapOf(
         "participants" to participants,
         "lastMessage" to "Connection for: $serviceName",
-        "lastMessageTimestamp" to FieldValue.serverTimestamp(),
+        "lastMessageTimestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
         "serviceName" to serviceName,
-        "createdAt" to FieldValue.serverTimestamp()
+        "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
     )
 
     firestore.collection("conversations")
@@ -674,4 +406,3 @@ private fun updateParticipantNames(
         onSuccess(conversationId)
     }
 }
-
