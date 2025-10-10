@@ -2,7 +2,6 @@ package com.example.grindsphere
 
 import android.content.Intent
 import android.widget.Toast
-import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -14,6 +13,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -25,10 +26,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.grindsphere.customer.CustomerDashboardActivity
 import com.example.grindsphere.hustler.HustlerDashboardActivity
-// import com.example.grindsphere.admin.AdminDashboardActivity // <-- You will need to create this activity
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import kotlin.collections.listOf
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
@@ -48,9 +47,20 @@ fun GrindSphereLogin(isPreview: Boolean = false, onNavigateToSignup: () -> Unit)
 
     val coroutineScope = rememberCoroutineScope()
 
+    val gradientBrush = Brush.verticalGradient(
+        colors = listOf(Color(0xFF4A148C), Color(0xFF8E24AA))
+    )
+
     Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = Color(0xFF6A1B9A)
+        modifier = Modifier
+            .fillMaxSize()
+            .drawBehind {
+                drawRect(
+                    brush = gradientBrush,
+                    size = size
+                )
+            },
+        color = Color.Transparent
     ) {
         Column(
             modifier = Modifier
@@ -91,7 +101,7 @@ fun GrindSphereLogin(isPreview: Boolean = false, onNavigateToSignup: () -> Unit)
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
-                label = { 
+                label = {
                     Text("Password") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
