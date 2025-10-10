@@ -4,9 +4,9 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons // <-- Import Icons
-import androidx.compose.material.icons.filled.Visibility // <-- Import Visibility icon
-import androidx.compose.material.icons.filled.VisibilityOff // <-- Import VisibilityOff icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,12 +16,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation // <-- Import VisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lint.kotlin.metadata.Visibility
 import androidx.navigation.NavController
+import com.example.grindsphere.customer.CustomerDashboardActivity
+import com.example.grindsphere.hustler.HustlerDashboardActivity
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 
@@ -40,7 +41,7 @@ fun ExperimentSignupScreen(
     var userRole by remember { mutableStateOf<UserRole?>(null) }
     var loading by remember { mutableStateOf(false) }
 
-    // --- NEW: State for password visibility ---
+    // Password visibility
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmPasswordVisible by remember { mutableStateOf(false) }
 
@@ -137,7 +138,7 @@ fun ExperimentSignupScreen(
             )
             Spacer(modifier = Modifier.height(16.dp))
 
-            // --- MODIFIED: Password field with visibility toggle ---
+            // Password field
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
@@ -151,16 +152,14 @@ fun ExperimentSignupScreen(
                         Icons.Filled.Visibility
                     else Icons.Filled.VisibilityOff
 
-                    val description = if (passwordVisible) "Hide password" else "Show password"
-
                     IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                        Icon(imageVector = image, description)
+                        Icon(imageVector = image, contentDescription = null)
                     }
                 }
             )
             Spacer(modifier = Modifier.height(16.dp))
 
-            // --- MODIFIED: Confirm password field with visibility toggle ---
+            // Confirm Password field
             OutlinedTextField(
                 value = confirmPassword,
                 onValueChange = { confirmPassword = it },
@@ -174,10 +173,8 @@ fun ExperimentSignupScreen(
                         Icons.Filled.Visibility
                     else Icons.Filled.VisibilityOff
 
-                    val description = if (confirmPasswordVisible) "Hide password" else "Show password"
-
                     IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
-                        Icon(imageVector = image, description)
+                        Icon(imageVector = image, contentDescription = null)
                     }
                 }
             )
@@ -214,9 +211,24 @@ fun ExperimentSignupScreen(
                                                             "Signup successful!",
                                                             Toast.LENGTH_SHORT
                                                         ).show()
-                                                        navController?.navigate("login")
-                                                    }
 
+                                                        // ✅ Navigate to the correct dashboard
+                                                        when (userRole) {
+                                                            UserRole.HUSTLER -> {
+                                                                val intent = Intent(context, HustlerDashboardActivity::class.java)
+                                                                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                                                context.startActivity(intent)
+                                                            }
+                                                            UserRole.CUSTOMER -> {
+                                                                val intent = Intent(context, CustomerDashboardActivity::class.java)
+                                                                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                                                context.startActivity(intent)
+                                                            }
+                                                            else -> {
+                                                                Toast.makeText(context, "Unknown role", Toast.LENGTH_SHORT).show()
+                                                            }
+                                                        }
+                                                    }
                                                     ?.addOnFailureListener { e ->
                                                         loading = false
                                                         Toast.makeText(
