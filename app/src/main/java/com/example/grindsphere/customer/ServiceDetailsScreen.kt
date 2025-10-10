@@ -76,6 +76,69 @@ fun ServiceDetailsScreen(
     val firestore = FirebaseFirestore.getInstance()
     val currentUserId = auth.currentUser?.uid
 
+    // Add these new state variables for reporting
+    var showReportDialog by remember { mutableStateOf(false) }
+    var selectedReportReason by remember { mutableStateOf("") }
+    var customReportReason by remember { mutableStateOf("") }
+    var showCustomReasonInput by remember { mutableStateOf(false) }
+    var isReporting by remember { mutableStateOf(false) }
+
+    // Report reasons
+    val reportReasons = listOf(
+        "Spam or misleading",
+        "Inappropriate content",
+        "Fake service",
+        "Poor quality service",
+        "Harassment or abusive behavior",
+        "Safety concerns",
+        "Other"
+    )
+
+    // Function to submit report
+    fun submitReport() {
+        if (selectedReportReason.isEmpty()) {
+            Toast.makeText(context, "Please select a reason", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        if (selectedReportReason == "Other" && customReportReason.isBlank()) {
+            Toast.makeText(context, "Please describe the reason", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        isReporting = true
+        val currentUser = auth.currentUser
+        val finalReason = if (selectedReportReason == "Other") customReportReason else selectedReportReason
+
+        if (currentUser != null && service != null) {
+            val reportData = hashMapOf(
+                "serviceId" to serviceId,
+                "serviceName" to service!!.name,
+                "reporterId" to currentUser.uid,
+                "reporterName" to currentUserName,
+                "reportedHustlerId" to service!!.ownerUid,
+                "reportedHustlerName" to service!!.ownerName,
+                "reason" to finalReason,
+                "timestamp" to System.currentTimeMillis(),
+                "status" to "pending"
+            )
+
+            firestore.collection("serviceReports").add(reportData)
+                .addOnSuccessListener {
+                    Toast.makeText(context, "Report submitted successfully", Toast.LENGTH_SHORT).show()
+                    showReportDialog = false
+                    selectedReportReason = ""
+                    customReportReason = ""
+                    showCustomReasonInput = false
+                    isReporting = false
+                }
+                .addOnFailureListener { e ->
+                    Toast.makeText(context, "Failed to submit report: ${e.message}", Toast.LENGTH_SHORT).show()
+                    isReporting = false
+                }
+        }
+    }
+
     // Redirect to login if not authenticated
     if (currentUserId == null) {
         navController.navigate("login") {
@@ -193,10 +256,12 @@ fun ServiceDetailsScreen(
             if (savedServices.contains(serviceId)) {
                 // Remove from favorites
                 savedServices.remove(serviceId)
+                isFavorite = false
             } else {
                 // Add to favorites
                 if (!savedServices.contains(serviceId)) {
                     savedServices.add(serviceId)
+                    isFavorite = true
                 }
             }
 
@@ -587,7 +652,7 @@ fun ServiceDetailsScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Action Buttons Section - REPLACED with simple message button
+                // Action Buttons Section - WITH REPORT BUTTON ADDED
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -631,6 +696,26 @@ fun ServiceDetailsScreen(
                             imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarOutline,
                             contentDescription = "Favorite",
                             tint = if (isFavorite) Color(0xFFFFD700) else Color.Gray,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+
+                    // Report Button
+                    IconButton(
+                        onClick = {
+                            showReportDialog = true
+                        },
+                        modifier = Modifier
+                            .size(56.dp)
+                            .background(
+                                Color.Red.copy(alpha = 0.1f),
+                                RoundedCornerShape(12.dp)
+                            )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Flag,
+                            contentDescription = "Report Service",
+                            tint = Color.Red,
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -770,6 +855,138 @@ fun ServiceDetailsScreen(
                 }
             )
         }
+
+        // Report Dialog
+        if (showReportDialog) {
+            AlertDialog(
+                onDismissRequest = {
+                    if (!isReporting) {
+                        showReportDialog = false
+                        selectedReportReason = ""
+                        customReportReason = ""
+                        showCustomReasonInput = false
+                    }
+                },
+                title = {
+                    Text(
+                        "Report Service",
+                        color = Color.Black,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Column {
+                        Text(
+                            "Please select the reason for reporting this service:",
+                            color = Color.Black,
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
+
+                        // Report reason options
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            reportReasons.forEach { reason ->
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            selectedReportReason = reason
+                                            showCustomReasonInput = reason == "Other"
+                                        }
+                                        .padding(vertical = 8.dp)
+                                ) {
+                                    RadioButton(
+                                        selected = selectedReportReason == reason,
+                                        onClick = {
+                                            selectedReportReason = reason
+                                            showCustomReasonInput = reason == "Other"
+                                        }
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = reason,
+                                        color = Color.Black,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Custom reason input
+                        if (showCustomReasonInput) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            TextField(
+                                value = customReportReason,
+                                onValueChange = { customReportReason = it },
+                                placeholder = { Text("Please describe the issue...") },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(100.dp),
+                                maxLines = 3,
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = Color.White,
+                                    unfocusedContainerColor = Color.White,
+                                    focusedIndicatorColor = Color(0xFF7F5A83),
+                                    unfocusedIndicatorColor = Color.Gray
+                                )
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "Your report will be reviewed by our team. We take all reports seriously.",
+                            color = Color.Gray,
+                            fontSize = 12.sp
+                        )
+                    }
+                },
+                confirmButton = {
+                    Column {
+                        Button(
+                            onClick = { submitReport() },
+                            enabled = !isReporting && selectedReportReason.isNotEmpty() &&
+                                    (selectedReportReason != "Other" || customReportReason.isNotBlank()),
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.Red,
+                                disabledContainerColor = Color.Red.copy(alpha = 0.5f)
+                            )
+                        ) {
+                            if (isReporting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(Modifier.width(8.dp))
+                            }
+                            Text(
+                                if (isReporting) "Submitting..." else "Submit Report",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        if (!isReporting) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            TextButton(
+                                onClick = {
+                                    showReportDialog = false
+                                    selectedReportReason = ""
+                                    customReportReason = ""
+                                    showCustomReasonInput = false
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Cancel", color = Color.Gray)
+                            }
+                        }
+                    }
+                }
+            )
+        }
     } ?: Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -777,7 +994,6 @@ fun ServiceDetailsScreen(
         Text("Service not found.", color = Color.White)
     }
 }
-
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun EnhancedFullScreenImageGallery(
