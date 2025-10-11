@@ -101,6 +101,7 @@ fun CustomerDashboardScreen() {
                     .padding(padding)
             ) {
                 composable("services") { ServicesScreen(navController) }
+                composable("search") { CustomerSearchScreen(navController) } // ADD THIS
                 composable("conversations") { ConversationsScreen(navController) }
                 composable("profile") { CustomerProfileScreen(navController) }
                 composable("serviceDetails/{serviceId}") { backStackEntry ->
@@ -155,6 +156,14 @@ fun CustomerBottomNavigation(navController: NavHostController) {
             label = { Text("Services") },
             selected = currentRoute == "services",
             onClick = { navController.navigate("services") }
+        )
+
+        // ADD SEARCH NAVIGATION ITEM
+        NavigationBarItem(
+            icon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
+            label = { Text("Search") },
+            selected = currentRoute == "search",
+            onClick = { navController.navigate("search") }
         )
 
         NavigationBarItem(
@@ -251,67 +260,55 @@ fun ServicesScreen(navController: NavHostController) {
     ) {
         // Header with welcome message
         item {
-            Column(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(24.dp)
+                    .padding(24.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    "Discover Services",
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    modifier = Modifier.padding(bottom = 4.dp)
-                )
-                Text(
-                    "Find amazing services near you",
-                    fontSize = 16.sp,
-                    color = Color.White.copy(alpha = 0.8f)
+                Column {
+                    Text(
+                        "Discover Services",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                    Text(
+                        "Find amazing services near you",
+                        fontSize = 16.sp,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+                }
+
+                // Search icon - NAVIGATES TO SEARCH SCREEN
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = "Search",
+                    tint = Color.White,
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clickable { navController.navigate("search") }
                 )
             }
         }
 
-        // Search Bar
+        // Show total services count
         item {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 8.dp)
-            ) {
-                TextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text("Search services...", color = Color.Gray) },
-                    singleLine = true,
-                    leadingIcon = {
-                        Icon(Icons.Default.Search, contentDescription = "Search", tint = Color(0xFF7F5A83))
-                    },
-                    trailingIcon = {
-                        if (searchQuery.isNotBlank()) {
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color(0xFF7F5A83))
-                            }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color.White,
-                        unfocusedContainerColor = Color.White,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        focusedTextColor = Color.Black,
-                        unfocusedTextColor = Color.Black
-                    ),
-                    textStyle = LocalTextStyle.current.copy(fontSize = 16.sp)
-                )
-            }
+            Text(
+                "${popularServices.size} Services Available",
+                fontSize = 16.sp,
+                color = Color.White.copy(alpha = 0.8f),
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+            )
         }
 
-        // Show search results if searching
-        if (searchQuery.isNotBlank()) {
+        // Featured Services Section - BIGGER CARDS like Showmax
+        if (featuredServices.isNotEmpty()) {
             item {
                 Text(
-                    "Search Results for '$searchQuery'",
+                    "Featured Services",
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
@@ -319,213 +316,135 @@ fun ServicesScreen(navController: NavHostController) {
                 )
             }
 
-            if (displayedServices.isNotEmpty()) {
-                items(displayedServices.chunked(2)) { rowServices ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp)
-                            .padding(bottom = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        rowServices.forEach { service ->
-                            ServiceCardSmall(
-                                service = service,
-                                onClick = { navController.navigate("serviceDetails/${service.id}") },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                        // Add empty space if odd number of services
-                        if (rowServices.size == 1) {
-                            Spacer(modifier = Modifier.weight(1f))
-                        }
-                    }
-                }
-            } else {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(32.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                Icons.Default.SearchOff,
-                                contentDescription = "No results",
-                                tint = Color.White.copy(alpha = 0.7f),
-                                modifier = Modifier.size(64.dp)
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                "No services found for '$searchQuery'",
-                                color = Color.White.copy(alpha = 0.7f),
-                                fontSize = 16.sp
-                            )
-                            Text(
-                                "Try different search terms",
-                                color = Color.White.copy(alpha = 0.5f),
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
-                }
-            }
-        } else {
-            // REGULAR HOME PAGE CONTENT (when not searching)
-
-            // Show total services count
             item {
-                Text(
-                    "${popularServices.size} Services Available",
-                    fontSize = 16.sp,
-                    color = Color.White.copy(alpha = 0.8f),
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-                )
-            }
-
-            // Featured Services Section - BIGGER CARDS like Showmax
-            if (featuredServices.isNotEmpty()) {
-                item {
-                    Text(
-                        "Featured Services",
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
-                    )
-                }
-
-                item {
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        contentPadding = PaddingValues(horizontal = 24.dp),
-                        modifier = Modifier.padding(bottom = 24.dp)
-                    ) {
-                        items(featuredServices) { service ->
-                            // BIGGER CARD - Showmax style
-                            Card(
-                                modifier = Modifier
-                                    .width(320.dp) // Increased width
-                                    .height(280.dp) // Increased height
-                                    .clickable {
-                                        navController.navigate("serviceDetails/${service.id}")
-                                    },
-                                shape = RoundedCornerShape(20.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color.White)
-                            ) {
-                                Box(modifier = Modifier.fillMaxSize()) {
-                                    if (service.banner.isNotEmpty()) {
-                                        Image(
-                                            painter = rememberAsyncImagePainter(service.banner),
-                                            contentDescription = service.name,
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier.fillMaxSize()
-                                        )
-                                    } else {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .background(
-                                                    Brush.verticalGradient(
-                                                        listOf(
-                                                            Color(0xFF7F5A83),
-                                                            Color(0xFF0D324D)
-                                                        )
-                                                    )
-                                                ),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Storefront,
-                                                contentDescription = "Service",
-                                                tint = Color.White,
-                                                modifier = Modifier.size(48.dp) // Bigger icon
-                                            )
-                                        }
-                                    }
-
-                                    // In the featured services card, replace the gradient Box with:
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    contentPadding = PaddingValues(horizontal = 24.dp),
+                    modifier = Modifier.padding(bottom = 24.dp)
+                ) {
+                    items(featuredServices) { service ->
+                        // BIGGER CARD - Showmax style
+                        Card(
+                            modifier = Modifier
+                                .width(320.dp) // Increased width
+                                .height(280.dp) // Increased height
+                                .clickable {
+                                    navController.navigate("serviceDetails/${service.id}")
+                                },
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White)
+                        ) {
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                if (service.banner.isNotEmpty()) {
+                                    Image(
+                                        painter = rememberAsyncImagePainter(service.banner),
+                                        contentDescription = service.name,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                } else {
                                     Box(
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .background(
                                                 Brush.verticalGradient(
-                                                    colors = listOf(
-                                                        Color.Transparent,
-                                                        Color.Transparent,
-                                                        Color.Black.copy(alpha = 0.4f) // Lighter overlay
-                                                    ),
-                                                    startY = 0f,
-                                                    endY = 300f
+                                                    listOf(
+                                                        Color(0xFF7F5A83),
+                                                        Color(0xFF0D324D)
+                                                    )
                                                 )
-                                            )
-                                    )
-
-                                    // Enhanced service info at bottom
-                                    Column(
-                                        modifier = Modifier
-                                            .align(Alignment.BottomStart)
-                                            .padding(20.dp) // More padding
+                                            ),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Text(
-                                            service.name,
-                                            color = Color.White,
-                                            fontSize = 22.sp, // Bigger font
-                                            fontWeight = FontWeight.Bold,
-                                            maxLines = 2, // Allow 2 lines
-                                            overflow = TextOverflow.Ellipsis
+                                        Icon(
+                                            Icons.Default.Storefront,
+                                            contentDescription = "Service",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(48.dp) // Bigger icon
                                         )
-                                        Spacer(modifier = Modifier.height(8.dp))
+                                    }
+                                }
 
-                                        // Enhanced rating and views
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            if (service.rating > 0.0) {
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    Icon(
-                                                        Icons.Default.Star,
-                                                        contentDescription = "Rating",
-                                                        tint = Color(0xFFFFD700),
-                                                        modifier = Modifier.size(16.dp)
-                                                    )
-                                                    Spacer(modifier = Modifier.width(4.dp))
-                                                    Text(
-                                                        String.format(Locale.US, "%.1f", service.rating),
-                                                        color = Color.White,
-                                                        fontSize = 14.sp,
-                                                        fontWeight = FontWeight.Medium
-                                                    )
-                                                }
-                                                Spacer(modifier = Modifier.width(12.dp))
-                                            }
+                                // In the featured services card, replace the gradient Box with:
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(
+                                            Brush.verticalGradient(
+                                                colors = listOf(
+                                                    Color.Transparent,
+                                                    Color.Transparent,
+                                                    Color.Black.copy(alpha = 0.4f) // Lighter overlay
+                                                ),
+                                                startY = 0f,
+                                                endY = 300f
+                                            )
+                                        )
+                                )
+
+                                // Enhanced service info at bottom
+                                Column(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomStart)
+                                        .padding(20.dp) // More padding
+                                ) {
+                                    Text(
+                                        service.name,
+                                        color = Color.White,
+                                        fontSize = 22.sp, // Bigger font
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 2, // Allow 2 lines
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    // Enhanced rating and views
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        if (service.rating > 0.0) {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Icon(
-                                                    Icons.Default.Visibility,
-                                                    contentDescription = "Views",
-                                                    tint = Color.White.copy(alpha = 0.9f),
-                                                    modifier = Modifier.size(14.dp)
+                                                    Icons.Default.Star,
+                                                    contentDescription = "Rating",
+                                                    tint = Color(0xFFFFD700),
+                                                    modifier = Modifier.size(16.dp)
                                                 )
                                                 Spacer(modifier = Modifier.width(4.dp))
                                                 Text(
-                                                    "${service.views} views",
-                                                    color = Color.White.copy(alpha = 0.9f),
+                                                    String.format(Locale.US, "%.1f", service.rating),
+                                                    color = Color.White,
                                                     fontSize = 14.sp,
                                                     fontWeight = FontWeight.Medium
                                                 )
                                             }
+                                            Spacer(modifier = Modifier.width(12.dp))
                                         }
-
-                                        // Categories if available
-                                        if (service.categories.isNotEmpty()) {
-                                            Spacer(modifier = Modifier.height(8.dp))
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                Icons.Default.Visibility,
+                                                contentDescription = "Views",
+                                                tint = Color.White.copy(alpha = 0.9f),
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
                                             Text(
-                                                service.categories.joinToString(" • "),
-                                                color = Color.White.copy(alpha = 0.8f),
-                                                fontSize = 12.sp,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
+                                                "${service.views} views",
+                                                color = Color.White.copy(alpha = 0.9f),
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Medium
                                             )
                                         }
+                                    }
+
+                                    // Categories if available
+                                    if (service.categories.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(
+                                            service.categories.joinToString(" • "),
+                                            color = Color.White.copy(alpha = 0.8f),
+                                            fontSize = 12.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
                                     }
                                 }
                             }
@@ -533,11 +452,107 @@ fun ServicesScreen(navController: NavHostController) {
                     }
                 }
             }
+        }
 
-            // Popular Categories Section
+        // Popular Categories Section
+        item {
+            Text(
+                "Browse Categories",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
+            )
+        }
+
+        item {
+            val popularCategories = listOf("Tutoring", "Beauty", "Food", "Fitness", "Design", "Tech", "Music", "Photography")
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(horizontal = 24.dp),
+                modifier = Modifier.padding(bottom = 24.dp)
+            ) {
+                items(popularCategories) { category ->
+                    Card(
+                        modifier = Modifier
+                            .width(120.dp)
+                            .height(80.dp)
+                            .clickable {
+                                navController.navigate("search") // Navigate to search instead of setting query
+                            },
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color.White.copy(alpha = 0.2f)
+                        )
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.verticalGradient(
+                                        listOf(
+                                            Color(0xFF7F5A83).copy(alpha = 0.6f),
+                                            Color(0xFF0D324D).copy(alpha = 0.6f)
+                                        )
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                category,
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Newest Services Section - ONLY SHOW RECENTLY CREATED SERVICES
+        if (newestServices.isNotEmpty()) {
+            item {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
+                ) {
+                    Text(
+                        "Newly Added",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    Text(
+                        "${newestServices.size} new",
+                        fontSize = 14.sp,
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
+            item {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    contentPadding = PaddingValues(horizontal = 24.dp),
+                    modifier = Modifier.padding(bottom = 24.dp)
+                ) {
+                    items(newestServices) { service ->
+                        ServiceCardMedium(
+                            service = service,
+                            onClick = { navController.navigate("serviceDetails/${service.id}") }
+                        )
+                    }
+                }
+            }
+        }
+
+        // Most Popular Services Section
+        if (popularServices.isNotEmpty()) {
             item {
                 Text(
-                    "Browse Categories",
+                    "Most Popular",
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
@@ -546,160 +561,62 @@ fun ServicesScreen(navController: NavHostController) {
             }
 
             item {
-                val popularCategories = listOf("Tutoring", "Beauty", "Food", "Fitness", "Design", "Tech", "Music", "Photography")
                 LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
                     contentPadding = PaddingValues(horizontal = 24.dp),
                     modifier = Modifier.padding(bottom = 24.dp)
                 ) {
-                    items(popularCategories) { category ->
-                        Card(
-                            modifier = Modifier
-                                .width(120.dp)
-                                .height(80.dp)
-                                .clickable {
-                                    searchQuery = category
-                                },
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = Color.White.copy(alpha = 0.2f)
-                            )
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(
-                                        Brush.verticalGradient(
-                                            listOf(
-                                                Color(0xFF7F5A83).copy(alpha = 0.6f),
-                                                Color(0xFF0D324D).copy(alpha = 0.6f)
-                                            )
-                                        )
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    category,
-                                    color = Color.White,
-                                    fontWeight = FontWeight.SemiBold,
-                                    textAlign = TextAlign.Center
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Newest Services Section - ONLY SHOW RECENTLY CREATED SERVICES
-            if (newestServices.isNotEmpty()) {
-                item {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
-                    ) {
-                        Text(
-                            "Newly Added",
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text(
-                            "${newestServices.size} new",
-                            fontSize = 14.sp,
-                            color = Color.White.copy(alpha = 0.7f)
+                    items(popularServices.take(8)) { service ->
+                        ServiceCardMedium(
+                            service = service,
+                            onClick = { navController.navigate("serviceDetails/${service.id}") }
                         )
                     }
                 }
+            }
+        }
 
-                item {
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        contentPadding = PaddingValues(horizontal = 24.dp),
-                        modifier = Modifier.padding(bottom = 24.dp)
-                    ) {
-                        items(newestServices) { service ->
-                            ServiceCardMedium(
-                                service = service,
-                                onClick = { navController.navigate("serviceDetails/${service.id}") }
-                            )
-                        }
-                    }
+        // Loading state
+        if (isLoading) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = Color.White)
                 }
             }
+        }
 
-            // Most Popular Services Section
-            if (popularServices.isNotEmpty()) {
-                item {
-                    Text(
-                        "Most Popular",
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
-                    )
-                }
-
-                item {
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        contentPadding = PaddingValues(horizontal = 24.dp),
-                        modifier = Modifier.padding(bottom = 24.dp)
-                    ) {
-                        items(popularServices.take(8)) { service ->
-                            ServiceCardMedium(
-                                service = service,
-                                onClick = { navController.navigate("serviceDetails/${service.id}") }
-                            )
-                        }
-                    }
-                }
-            }
-
-            // REMOVED: All Services Grid section
-
-            // Loading state
-            if (isLoading) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(200.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(color = Color.White)
-                    }
-                }
-            }
-
-            // No services state
-            if (!isLoading && popularServices.isEmpty()) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(32.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                Icons.Default.Storefront,
-                                contentDescription = "No services",
-                                tint = Color.White.copy(alpha = 0.7f),
-                                modifier = Modifier.size(64.dp)
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                "No services available yet",
-                                color = Color.White.copy(alpha = 0.7f),
-                                fontSize = 16.sp
-                            )
-                            Text(
-                                "Be the first to add a service!",
-                                color = Color.White.copy(alpha = 0.5f),
-                                fontSize = 12.sp
-                            )
-                        }
+        // No services state
+        if (!isLoading && popularServices.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Default.Storefront,
+                            contentDescription = "No services",
+                            tint = Color.White.copy(alpha = 0.7f),
+                            modifier = Modifier.size(64.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            "No services available yet",
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontSize = 16.sp
+                        )
+                        Text(
+                            "Be the first to add a service!",
+                            color = Color.White.copy(alpha = 0.5f),
+                            fontSize = 12.sp
+                        )
                     }
                 }
             }
