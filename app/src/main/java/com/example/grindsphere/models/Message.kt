@@ -10,5 +10,6 @@ data class Message(
     val timestamp: Timestamp = Timestamp.now(),
     val type: String = "text", // text, system, booking_request, etc.
     val bookingId: String? = null,
-    val senderProfilePicUrl: String? = null
+    val senderProfilePicUrl: String? = null,
+    val isRead: Boolean = false
 )

@@ -106,17 +106,40 @@ fun HustlerDashboard(
         "Fashion", "Food", "Music", "Fitness", "Transport", "Nails", "Hair", "Beauty", "Cake", "DJ"
     )
 
-    // Load pending requests count
-    LaunchedEffect(currentUser?.uid) {
-        currentUser?.uid?.let { uid ->
-            firestore.collection("bookingRequests")
-                .whereEqualTo("hustlerId", uid)
-                .whereEqualTo("status", "pending")
+    var unreadMessagesCount by remember { mutableIntStateOf(0) }
+    val currentUserId = auth.currentUser?.uid
+
+// Load actual unread messages count for hustler
+    LaunchedEffect(currentUserId) {
+        if (currentUserId != null) {
+            firestore.collection("conversations")
+                .whereArrayContains("participants", currentUserId)
                 .addSnapshotListener { snapshot, error ->
-                    pendingRequests = snapshot?.size() ?: 0
+                    if (error != null) return@addSnapshotListener
+
+                    var totalUnread = 0
+                    snapshot?.documents?.forEach { conversationDoc ->
+                        val conversationId = conversationDoc.id
+
+                        // Listen for unread messages in this conversation
+                        firestore.collection("conversations")
+                            .document(conversationId)
+                            .collection("messages")
+                            .whereEqualTo("isRead", false)
+                            .whereNotEqualTo("senderId", currentUserId)
+                            .addSnapshotListener { messagesSnapshot, _ ->
+                                messagesSnapshot?.let {
+                                    val unreadInConvo = it.size()
+                                    // Update total count
+                                    totalUnread += unreadInConvo
+                                    unreadMessagesCount = totalUnread
+                                }
+                            }
+                    }
                 }
         }
     }
+
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -308,10 +331,12 @@ fun HustlerDashboard(
                     icon = {
                         BadgedBox(
                             badge = {
-                                // Add your unread count logic here
-                                if (pendingRequests > 0) {
+                                if (unreadMessagesCount > 0) {
                                     Badge {
-                                        Text(pendingRequests.toString())
+                                        Text(
+                                            text = if (unreadMessagesCount > 99) "99+"
+                                            else unreadMessagesCount.toString()
+                                        )
                                     }
                                 }
                             }

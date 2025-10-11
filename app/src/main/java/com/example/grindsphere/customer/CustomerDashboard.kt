@@ -134,19 +134,39 @@ fun CustomerBottomNavigation(navController: NavHostController) {
     var unreadMessagesCount by remember { mutableIntStateOf(0) }
     val auth = FirebaseAuth.getInstance()
     val firestore = FirebaseFirestore.getInstance()
+    val currentUserId = auth.currentUser?.uid // ADD THIS LINE
 
-    // Load unread messages count
-    LaunchedEffect(auth.currentUser?.uid) {
-        auth.currentUser?.uid?.let { uid ->
+    // Load actual unread messages count
+    LaunchedEffect(currentUserId) {
+        if (currentUserId != null) {
             firestore.collection("conversations")
-                .whereArrayContains("participants", uid)
-                .addSnapshotListener { snapshot, _ ->
-                    // You'll need to implement proper unread count logic here
-                    // For now, we'll just show if there are any conversations
-                    unreadMessagesCount = snapshot?.size() ?: 0
+                .whereArrayContains("participants", currentUserId)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) return@addSnapshotListener
+
+                    var totalUnread = 0
+                    snapshot?.documents?.forEach { conversationDoc ->
+                        val conversationId = conversationDoc.id
+
+                        // Listen for unread messages in this conversation
+                        firestore.collection("conversations")
+                            .document(conversationId)
+                            .collection("messages")
+                            .whereEqualTo("isRead", false)
+                            .whereNotEqualTo("senderId", currentUserId)
+                            .addSnapshotListener { messagesSnapshot, _ ->
+                                messagesSnapshot?.let {
+                                    val unreadInConvo = it.size()
+                                    // Update total count
+                                    totalUnread += unreadInConvo
+                                    unreadMessagesCount = totalUnread
+                                }
+                            }
+                    }
                 }
         }
     }
+
 
     NavigationBar(
         containerColor = Color.White
@@ -1590,6 +1610,28 @@ fun CustomerChatScreen(
     val scrollState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
+    // Function to mark messages as read
+    fun markMessagesAsRead(conversationId: String, currentUserId: String) {
+        firestore.collection("conversations")
+            .document(conversationId)
+            .collection("messages")
+            .whereEqualTo("isRead", false)
+            .whereNotEqualTo("senderId", currentUserId)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                snapshot.documents.forEach { doc ->
+                    doc.reference.update("isRead", true)
+                }
+            }
+    }
+
+    // Mark messages as read when chat opens
+    LaunchedEffect(conversationId, currentUser?.uid) {
+        if (conversationId.isNotEmpty() && currentUser?.uid != null) {
+            markMessagesAsRead(conversationId, currentUser.uid)
+        }
+    }
+
     // Show error toast when errorMessage changes
     LaunchedEffect(errorMessage) {
         errorMessage?.let { message ->
@@ -1607,6 +1649,7 @@ fun CustomerChatScreen(
                 }
         }
     }
+
 
     // Load conversation details and extract hustler info
     LaunchedEffect(conversationId) {
@@ -1685,7 +1728,9 @@ fun CustomerChatScreen(
                     "senderProfilePicUrl" to currentUserProfilePic, // Add profile picture URL
                     "text" to messageText,
                     "timestamp" to Timestamp.now(),
-                    "type" to "text"
+                    "type" to "text",
+                    "isRead" to false // Add this line,
+
                 )
 
                 // Add message to subcollection
@@ -1713,6 +1758,8 @@ fun CustomerChatScreen(
             }
         }
     }
+
+
 
     Scaffold(
         topBar = {

@@ -139,6 +139,28 @@ fun ChatScreen(
         }
     }
 
+    // In ChatScreen, add this function
+    fun markMessagesAsRead(conversationId: String, currentUserId: String) {
+        firestore.collection("conversations")
+            .document(conversationId)
+            .collection("messages")
+            .whereEqualTo("isRead", false)
+            .whereNotEqualTo("senderId", currentUserId)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                snapshot.documents.forEach { doc ->
+                    doc.reference.update("isRead", true)
+                }
+            }
+    }
+
+// Call this function when the chat screen is opened/active
+    LaunchedEffect(conversationId, currentUser?.uid) {
+        if (conversationId.isNotEmpty() && currentUser?.uid != null) {
+            markMessagesAsRead(conversationId, currentUser.uid)
+        }
+    }
+
     // Send message function
     fun sendMessage() {
         if (messageText.isBlank() || currentUser == null) return
@@ -155,7 +177,8 @@ fun ChatScreen(
                     "senderProfilePicUrl" to currentUserProfilePic,
                     "text" to messageText,
                     "timestamp" to Timestamp.now(),
-                    "type" to "text"
+                    "type" to "text",
+                    "isRead" to false // Add this line
                 )
 
                 // Add message to subcollection
@@ -377,6 +400,8 @@ fun ChatScreen(
         }
     }
 }
+
+
 
 @Composable
 fun MessageBubble(
