@@ -2,8 +2,25 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Permissions for network and media access -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+
+    <!-- For Android 13+ (SDK 33), optional for images/videos/files -->
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_IMAGES"
+        tools:targetApi="33" />
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_VIDEO"
+        tools:targetApi="33" />
+
+    <!-- Camera permission -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Corresponding hardware feature declaration -->
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
 
     <application
         android:name="MyApplication"
@@ -16,40 +33,40 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.GrindSphere">
 
-
-        <!-- LoginActivity is declared but no longer the launcher -->
+        <!-- LoginActivity -->
         <activity
             android:name=".LoginActivity"
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.GrindSphere"
-            android:launchMode="singleTop">
-        </activity>
+            android:launchMode="singleTop" />
 
-        <!-- MainActivity is now the launcher activity -->
+        <!-- MainActivity as launcher -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.GrindSphere" >
+            android:theme="@style/Theme.GrindSphere">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <!-- AdminActivity is declared but not launcher -->
+        <!-- AdminActivity -->
         <activity
             android:name=".AdminActivity"
             android:exported="true"
             android:label="Admin" />
 
+        <!-- SignupActivity -->
         <activity
             android:name=".SignupActivity"
             android:exported="false"
             android:label="Sign Up"
             android:theme="@style/Theme.GrindSphere" />
 
+        <!-- Hustler Activities -->
         <activity
             android:name=".hustler.HustlerDashboardActivity"
             android:exported="false"
@@ -57,16 +74,9 @@
             android:theme="@style/Theme.GrindSphere" />
 
         <activity
-            android:name=".customer.CustomerDashboardActivity"
-            android:exported="false"
-            android:label="Customer Dashboard"
-            android:theme="@style/Theme.GrindSphere" />
-
-        <activity
             android:name=".hustler.EditServiceActivity"
             android:exported="false" />
 
-        <!-- Chat-related activities -->
         <activity
             android:name=".hustler.NewChatActivity"
             android:exported="false"
@@ -84,11 +94,12 @@
             android:name=".hustler.ServiceDetailActivity"
             android:exported="false" />
 
-
-
-
-
+        <!-- Customer Activities -->
+        <activity
+            android:name=".customer.CustomerDashboardActivity"
+            android:exported="false"
+            android:label="Customer Dashboard"
+            android:theme="@style/Theme.GrindSphere" />
 
     </application>
-
 </manifest>

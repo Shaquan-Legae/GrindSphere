@@ -1,8 +1,6 @@
-package com.example.grindsphere.hustler
+package com.example.grindsphere.customer
 
-import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Log
 import android.widget.Toast
@@ -35,8 +33,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.FileProvider
 import coil.compose.rememberAsyncImagePainter
+import com.example.grindsphere.hustler.MessageBubble
 import com.example.grindsphere.models.Conversation
 import com.example.grindsphere.models.Message
 import com.google.firebase.Timestamp
@@ -44,21 +42,17 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
-import com.google.firebase.firestore.ktx.toObject
+import com.google.firebase.firestore.toObject
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.io.File
 import java.io.FileOutputStream
 
-private const val TAG = "HustlerChatScreen"
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen(
+fun CustomerChatScreen(
     conversationId: String,
-    customerUid: String,
-    customerName: String,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -71,9 +65,11 @@ fun ChatScreen(
     var conversation by remember { mutableStateOf<Conversation?>(null) }
     var loading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var customerProfilePic by remember { mutableStateOf("") }
+    var hustlerName by remember { mutableStateOf("Service Provider") }
+    var serviceName by remember { mutableStateOf("Service") }
+    var hustlerProfilePic by remember { mutableStateOf("") }
     var currentUserProfilePic by remember { mutableStateOf("") }
-
+    var hustlerId by remember { mutableStateOf("") }
     val scrollState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
@@ -85,109 +81,95 @@ fun ChatScreen(
         selectedFileUri = uri
     }
 
+    // ------------------- Attachment Dropdown -------------------
     var showAttachmentMenu by remember { mutableStateOf(false) }
-    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
-        bitmap?.let {
-            val uri = saveBitmapToCacheAndGetUri(context, it)
-            selectedFileUri = uri
-        }
-    }
 
-    // ------------------- Load profile pics -------------------
-    LaunchedEffect(currentUser?.uid) {
-        currentUser?.uid?.let { uid ->
-            firestore.collection("users").document(uid).get()
-                .addOnSuccessListener { doc ->
-                    currentUserProfilePic = doc.getString("profilePicUrl") ?: ""
-                }
-        }
-    }
+    // ------------------ Send Attachments --------------------
+    fun sendAttachment(uri: Uri) {
+        if (currentUser == null) return
+        coroutineScope.launch {
+            try {
+                val fileName = uri.lastPathSegment ?: "Attachment"
+                val storageRef = FirebaseStorage.getInstance().reference
+                val fileRef = storageRef.child("attachments/${currentUser.uid}/$fileName")
 
-    LaunchedEffect(customerUid) {
-        firestore.collection("users").document(customerUid).get()
-            .addOnSuccessListener { doc ->
-                customerProfilePic = doc.getString("profilePicUrl") ?: ""
-            }
-    }
+                fileRef.putFile(uri)
+                    .addOnSuccessListener {
+                        fileRef.downloadUrl.addOnSuccessListener { downloadUri ->
+                            coroutineScope.launch {
+                                val userDoc = firestore.collection("users").document(currentUser.uid).get().await()
+                                val userName = userDoc.getString("name") ?: "Customer"
 
-    // ------------------- Error messages -------------------
-    LaunchedEffect(errorMessage) {
-        errorMessage?.let { message ->
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-            errorMessage = null
-        }
-    }
+                                val mimeType = context.contentResolver.getType(uri) ?: "*/*"
 
-    // ------------------- Load conversation -------------------
-    LaunchedEffect(conversationId) {
-        try {
-            firestore.collection("conversations").document(conversationId)
-                .addSnapshotListener { snapshot, _ ->
-                    conversation = snapshot?.toObject<Conversation>()
-                    loading = false
-                }
-        } catch (e: Exception) {
-            errorMessage = "Error loading conversation: ${e.message}"
-            loading = false
-        }
-    }
+                                val messageData = hashMapOf(
+                                    "senderId" to currentUser.uid,
+                                    "senderName" to userName,
+                                    "senderProfilePicUrl" to currentUserProfilePic,
+                                    "text" to "", // optional text
+                                    "attachmentUrl" to downloadUri.toString(),
+                                    "fileType" to mimeType, // ✅ save MIME type
+                                    "timestamp" to Timestamp.now(),
+                                    "type" to "attachment",
+                                    "isRead" to false
+                                )
 
-    // ------------------- Load messages -------------------
-    LaunchedEffect(conversationId) {
-        try {
-            firestore.collection("conversations")
-                .document(conversationId)
-                .collection("messages")
-                .orderBy("timestamp", Query.Direction.ASCENDING)
-                .addSnapshotListener { snapshot, error ->
-                    if (error != null) {
-                        Log.e(TAG, "Error loading messages: ${error.message}")
-                        return@addSnapshotListener
+                                firestore.collection("conversations")
+                                    .document(conversationId)
+                                    .collection("messages")
+                                    .add(messageData)
+                                    .await()
+
+                                firestore.collection("conversations")
+                                    .document(conversationId)
+                                    .update(
+                                        mapOf(
+                                            "lastMessage" to "[Attachment] $fileName",
+                                            "lastMessageTimestamp" to FieldValue.serverTimestamp()
+                                        )
+                                    )
+
+                                selectedFileUri = null
+                            }
+                        }.addOnFailureListener { errorMessage = "Failed to get download URL" }
                     }
-                    messages = snapshot?.documents?.mapNotNull { doc ->
-                        doc.toObject<Message>()?.copy(id = doc.id)
-                    } ?: emptyList()
-
-                    if (messages.isNotEmpty()) {
-                        coroutineScope.launch {
-                            scrollState.animateScrollToItem(messages.size - 1)
-                        }
-                    }
-                }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error setting up messages listener: ${e.message}")
+                    .addOnFailureListener { errorMessage = "Failed to upload attachment" }
+            } catch (e: Exception) {
+                errorMessage = "Failed to send attachment: ${e.message}"
+            }
         }
     }
 
-    // ------------------- Mark messages as read -------------------
-    fun markMessagesAsRead(conversationId: String, currentUserId: String) {
-        firestore.collection("conversations")
-            .document(conversationId)
-            .collection("messages")
-            .whereEqualTo("isRead", false)
-            .whereNotEqualTo("senderId", currentUserId)
-            .get()
-            .addOnSuccessListener { snapshot ->
-                snapshot.documents.forEach { doc ->
-                    doc.reference.update("isRead", true)
+    // ------------------- Open attachment -------------------
+    fun openAttachment(uri: String, type: String?) {
+        try {
+            if (type?.startsWith("image") == true || type?.startsWith("video") == true) {
+                // Open in-app for images/videos
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(Uri.parse(uri), type)
+                    flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
                 }
+                context.startActivity(intent)
+            } else {
+                // Ask system to open file using external app (PDF, DOC, etc.)
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(Uri.parse(uri), type ?: "*/*")
+                    flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                }
+                context.startActivity(Intent.createChooser(intent, "Open with"))
             }
-    }
-
-    LaunchedEffect(conversationId, currentUser?.uid) {
-        if (conversationId.isNotEmpty() && currentUser?.uid != null) {
-            markMessagesAsRead(conversationId, currentUser.uid)
+        } catch (e: Exception) {
+            Toast.makeText(context, "No app found to open this file", Toast.LENGTH_SHORT).show()
         }
     }
 
     // ------------------- Send text message -------------------
     fun sendMessage() {
         if (messageText.isBlank() || currentUser == null) return
-
         coroutineScope.launch {
             try {
                 val userDoc = firestore.collection("users").document(currentUser.uid).get().await()
-                val userName = userDoc.getString("name") ?: "User"
+                val userName = userDoc.getString("name") ?: "Customer"
 
                 val messageData = hashMapOf(
                     "senderId" to currentUser.uid,
@@ -217,58 +199,82 @@ fun ChatScreen(
                 messageText = ""
             } catch (e: Exception) {
                 errorMessage = "Failed to send message: ${e.message}"
-                Log.e(TAG, "Failed to send message", e)
+                Log.e("CustomerChatScreen", "Failed to send message", e)
             }
         }
     }
 
-    // ------------------- Send attachment -------------------
-    fun sendAttachment(uri: Uri) {
-        if (currentUser == null) return
-        coroutineScope.launch {
-            try {
-                val fileName = uri.lastPathSegment ?: "Attachment"
-                val storageRef = FirebaseStorage.getInstance()
-                    .reference
-                    .child("attachments/${currentUser.uid}/$fileName")
+    // ------------------- Mark messages as read -------------------
+    fun markMessagesAsRead(conversationId: String, currentUserId: String) {
+        firestore.collection("conversations")
+            .document(conversationId)
+            .collection("messages")
+            .whereEqualTo("isRead", false)
+            .whereNotEqualTo("senderId", currentUserId)
+            .get()
+            .addOnSuccessListener { snapshot -> snapshot.documents.forEach { it.reference.update("isRead", true) } }
+    }
 
-                storageRef.putFile(uri).await()
-                val attachmentUrl = storageRef.downloadUrl.await().toString()
+    // ------------------- Effects -------------------
+    LaunchedEffect(conversationId, currentUser?.uid) {
+        if (conversationId.isNotEmpty() && currentUser?.uid != null) markMessagesAsRead(conversationId, currentUser.uid)
+    }
 
-                val userDoc = firestore.collection("users").document(currentUser.uid).get().await()
-                val userName = userDoc.getString("name") ?: "User"
+    LaunchedEffect(errorMessage) {
+        errorMessage?.let { message ->
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            errorMessage = null
+        }
+    }
 
-                val messageData = hashMapOf(
-                    "senderId" to currentUser.uid,
-                    "senderName" to userName,
-                    "senderProfilePicUrl" to currentUserProfilePic,
-                    "text" to "",
-                    "attachmentUrl" to attachmentUrl,
-                    "timestamp" to Timestamp.now(),
-                    "type" to "attachment",
-                    "isRead" to false
-                )
+    LaunchedEffect(currentUser?.uid) {
+        currentUser?.uid?.let { uid ->
+            firestore.collection("users").document(uid).get()
+                .addOnSuccessListener { doc -> currentUserProfilePic = doc.getString("profilePicUrl") ?: "" }
+        }
+    }
 
-                firestore.collection("conversations")
-                    .document(conversationId)
-                    .collection("messages")
-                    .add(messageData)
-                    .await()
+    LaunchedEffect(conversationId) {
+        try {
+            firestore.collection("conversations").document(conversationId)
+                .addSnapshotListener { snapshot, _ ->
+                    conversation = snapshot?.toObject<Conversation>()
+                    val currentUserId = currentUser?.uid
+                    if (currentUserId != null && conversation != null) {
+                        hustlerId = conversation!!.participants.find { it != currentUserId } ?: ""
+                        hustlerName = conversation!!.participantNames[hustlerId] ?: "Service Provider"
+                        serviceName = conversation!!.serviceName ?: "Service"
+                        if (hustlerId.isNotEmpty()) {
+                            firestore.collection("users").document(hustlerId).get()
+                                .addOnSuccessListener { doc -> hustlerProfilePic = doc.getString("profilePicUrl") ?: "" }
+                        }
+                    }
+                    loading = false
+                }
+        } catch (e: Exception) {
+            errorMessage = "Error loading conversation: ${e.message}"
+            loading = false
+        }
+    }
 
-                firestore.collection("conversations")
-                    .document(conversationId)
-                    .update(
-                        mapOf(
-                            "lastMessage" to "[Attachment] $fileName",
-                            "lastMessageTimestamp" to FieldValue.serverTimestamp()
-                        )
-                    )
-
-                selectedFileUri = null
-            } catch (e: Exception) {
-                errorMessage = "Failed to send attachment: ${e.message}"
-                Log.e(TAG, "Failed to send attachment", e)
-            }
+    LaunchedEffect(conversationId) {
+        try {
+            firestore.collection("conversations")
+                .document(conversationId)
+                .collection("messages")
+                .orderBy("timestamp", Query.Direction.ASCENDING)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        Log.e("CustomerChatScreen", "Error loading messages: ${error.message}")
+                        return@addSnapshotListener
+                    }
+                    messages = snapshot?.documents?.mapNotNull { it.toObject<Message>()?.copy(id = it.id) } ?: emptyList()
+                    if (messages.isNotEmpty()) {
+                        coroutineScope.launch { scrollState.animateScrollToItem(messages.size - 1) }
+                    }
+                }
+        } catch (e: Exception) {
+            Log.e("CustomerChatScreen", "Error setting up messages listener: ${e.message}")
         }
     }
 
@@ -278,10 +284,10 @@ fun ChatScreen(
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (customerProfilePic.isNotEmpty()) {
+                        if (hustlerProfilePic.isNotEmpty()) {
                             Image(
-                                painter = rememberAsyncImagePainter(customerProfilePic),
-                                contentDescription = "Customer Profile",
+                                painter = rememberAsyncImagePainter(hustlerProfilePic),
+                                contentDescription = "Hustler Profile",
                                 modifier = Modifier.size(40.dp).clip(CircleShape),
                                 contentScale = ContentScale.Crop
                             )
@@ -290,14 +296,13 @@ fun ChatScreen(
                                 modifier = Modifier.size(40.dp).clip(CircleShape).background(Color(0xFF7F5A83)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(customerName.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold)
+                                Text(hustlerName.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold)
                             }
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
-                            Text(customerName, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                            Text(if (messages.isNotEmpty()) "Last seen recently" else "Say hello!",
-                                color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                            Text(hustlerName, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                            Text(serviceName, color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
                         }
                     }
                 },
@@ -311,10 +316,9 @@ fun ChatScreen(
         }
     ) { paddingValues ->
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .background(Brush.verticalGradient(listOf(Color(0xFF0D324D), Color(0xFF7F5A83))))
+            modifier = Modifier.fillMaxSize().padding(paddingValues).background(
+                Brush.verticalGradient(listOf(Color(0xFF0D324D), Color(0xFF7F5A83)))
+            )
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Messages list
@@ -332,7 +336,9 @@ fun ChatScreen(
                             Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "No messages", tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(64.dp))
                             Spacer(modifier = Modifier.height(16.dp))
                             Text("No messages yet", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Medium)
-                            Text("Start the conversation!", color = Color.White.copy(alpha = 0.7f), textAlign = TextAlign.Center)
+                            Text("Start the conversation with $hustlerName!", color = Color.White.copy(alpha = 0.7f), textAlign = TextAlign.Center)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Service: $serviceName", color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
                         }
                     }
                 } else {
@@ -347,18 +353,8 @@ fun ChatScreen(
                                 message = message,
                                 isMe = message.senderId == currentUser?.uid,
                                 currentUserProfilePic = currentUserProfilePic,
-                                otherUserProfilePic = customerProfilePic,
-                                onAttachmentClick = { url, type ->
-                                    try {
-                                        val intent = Intent(Intent.ACTION_VIEW).apply {
-                                            setDataAndType(Uri.parse(url), type ?: "*/*")
-                                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                        }
-                                        context.startActivity(intent)
-                                    } catch (e: Exception) {
-                                        Toast.makeText(context, "Cannot open attachment", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
+                                otherUserProfilePic = hustlerProfilePic,
+                                onAttachmentClick = { url, type -> openAttachment(url, type) } // <-- Added callback
                             )
                         }
                     }
@@ -392,23 +388,10 @@ fun ChatScreen(
                     }
                 }
 
-                // ------------------- Message input row -------------------
+                // Message input row
                 Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    // Attachment menu
-                    Box {
-                        IconButton(onClick = { showAttachmentMenu = true }, modifier = Modifier.size(48.dp)) {
-                            Icon(Icons.Filled.AttachFile, contentDescription = "Attach File", tint = Color.White)
-                        }
-                        DropdownMenu(expanded = showAttachmentMenu, onDismissRequest = { showAttachmentMenu = false }) {
-                            DropdownMenuItem(text = { Text("Take Photo") }, onClick = {
-                                showAttachmentMenu = false
-                                cameraLauncher.launch(null)
-                            })
-                            DropdownMenuItem(text = { Text("Choose File") }, onClick = {
-                                showAttachmentMenu = false
-                                filePickerLauncher.launch("*/*")
-                            })
-                        }
+                    IconButton(onClick = { filePickerLauncher.launch("*/*") }, modifier = Modifier.size(48.dp)) {
+                        Icon(Icons.Filled.AttachFile, contentDescription = "Attach File", tint = Color.White)
                     }
 
                     Spacer(modifier = Modifier.width(8.dp))
@@ -441,19 +424,10 @@ fun ChatScreen(
                             CircleShape
                         )
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "Send",
-                            tint = if (messageText.isNotBlank() || selectedFileUri != null) Color.Black else Color.White)
+                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = if (messageText.isNotBlank() || selectedFileUri != null) Color.Black else Color.White)
                     }
                 }
             }
         }
     }
-}
-
-// ------------------- Helper to save camera bitmap -------------------
-fun saveBitmapToCacheAndGetUri(context: Context, bitmap: Bitmap): Uri {
-    val file = File(context.cacheDir, "temp_${System.currentTimeMillis()}.png")
-    FileOutputStream(file).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-    return FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
 }
