@@ -1758,7 +1758,7 @@ fun CustomerChatScreen(
             }
         }
     }
-
+    
 
 
     Scaffold(

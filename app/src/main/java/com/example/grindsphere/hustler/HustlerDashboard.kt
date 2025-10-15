@@ -385,7 +385,6 @@ fun HustlerDashboard(
                     )
                 }
 
-
                 showSearchBar -> {
                     SearchScreen(
                         allServices = allServices,

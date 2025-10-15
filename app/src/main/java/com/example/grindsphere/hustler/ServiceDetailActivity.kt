@@ -1,5 +1,6 @@
 package com.example.grindsphere.hustler
 
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -623,57 +624,30 @@ fun ServiceDetailScreen(serviceId: String?) {
                     .padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+
+                //message button
                 Button(
                     onClick = {
-                        // Create booking request
-                        val currentUser = auth.currentUser
-                        if (serviceId != null && currentUser != null) {
-                            // Get customer name from Firestore
-                            firestore.collection("users").document(currentUser.uid).get()
-                                .addOnSuccessListener { userDoc ->
-                                    val customerName = userDoc.getString("name") ?: "Customer"
-
-                                    val bookingData = hashMapOf(
-                                        "serviceId" to serviceId,
-                                        "serviceName" to serviceName,
-                                        "customerUid" to currentUser.uid,
-                                        "customerName" to customerName,
-                                        "hustlerUid" to ownerUid,
-                                        "status" to "pending",
-                                        "timestamp" to System.currentTimeMillis(),
-                                        "message" to "I'm interested in your service!"
-                                    )
-
-                                    firestore.collection("bookingRequests").add(bookingData)
-                                        .addOnSuccessListener { docRef ->
-                                            Toast.makeText(context, "Connection request sent!", Toast.LENGTH_SHORT).show()
-
-                                            // Also create a conversation for messaging
-                                            val convoData = hashMapOf(
-                                                "participants" to listOf(currentUser.uid, ownerUid),
-                                                "timestamp" to System.currentTimeMillis(),
-                                                "lastMessage" to "Connection request: $serviceName",
-                                                "type" to "booking",
-                                                "bookingId" to docRef.id,
-                                                "serviceId" to serviceId
-                                            )
-                                            firestore.collection("conversations").add(convoData)
-                                                .addOnSuccessListener { convoDoc ->
-                                                    Toast.makeText(context, "You can now chat with the service provider", Toast.LENGTH_SHORT).show()
-                                                }
-                                        }
-                                        .addOnFailureListener { e ->
-                                            Toast.makeText(context, "Failed to send request: ${e.message}", Toast.LENGTH_SHORT).show()
-                                        }
+                        MessageBookingManager.createBookingWithConversation(
+                            context = context,
+                            serviceId = serviceId ?: "",
+                            serviceName = serviceName,
+                            hustlerId = ownerUid,
+                            customerMessage = "Hello, I'm interested in your service!",
+                            onSuccess = { bookingId, conversationId ->
+                                val intent = Intent(context, ChatActivity::class.java).apply {
+                                    putExtra("conversationId", conversationId)
+                                    putExtra("customerUid", auth.currentUser?.uid ?: "")
+                                    putExtra("customerName", currentUserName)
                                 }
-                        } else {
-                            Toast.makeText(context, "Please log in to connect", Toast.LENGTH_SHORT).show()
-                        }
+                                context.startActivity(intent)
+                            }
+                        )
                     },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7F5A83))
                 ) {
-                    Text("Connect")
+                    Text("Message provider") // ← Changed from "Connect" to "Message"
                 }
 
                 // Favorite Button with Star Icon

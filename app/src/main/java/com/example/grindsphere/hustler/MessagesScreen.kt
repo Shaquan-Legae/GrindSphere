@@ -123,7 +123,6 @@ fun MessagesScreen(
         }
     }
 }
-
 @Composable
 fun ConversationsSection(
     conversations: List<Conversation>,
@@ -144,12 +143,15 @@ fun ConversationsSection(
     } else {
         LazyColumn(modifier = Modifier.padding(16.dp)) {
             items(conversations) { conversation ->
+                // FIX: Get the other participant (customer) details
                 val otherParticipantId = conversation.participants.find { it != currentUserId } ?: ""
-                val otherUserName = conversation.participantNames[otherParticipantId] ?: "User"
+                val otherUserName = conversation.participantNames[otherParticipantId] ?: "Customer"
+                val serviceName = conversation.serviceName ?: "Service"
 
                 ConversationItem(
                     conversation = conversation,
                     userName = otherUserName,
+                    serviceName = serviceName, // ADD THIS
                     onTap = {
                         Log.d(TAG, "Opening existing conversation: ${conversation.id}")
                         try {
@@ -213,6 +215,7 @@ fun EmptyState(
 fun ConversationItem(
     conversation: Conversation,
     userName: String,
+    serviceName: String, // ADD THIS PARAMETER
     onTap: () -> Unit
 ) {
     Card(
@@ -230,11 +233,16 @@ fun ConversationItem(
                 modifier = Modifier
                     .size(50.dp)
                     .clip(CircleShape)
-                    .background(Color.Gray)
+                    .background(Color(0xFF7F5A83))
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(userName, color = Color.White, fontWeight = FontWeight.Bold)
+                Text( // ADD SERVICE NAME
+                    serviceName,
+                    color = Color.White.copy(alpha = 0.8f),
+                    fontSize = 12.sp
+                )
                 Text(
                     conversation.lastMessage ?: "No messages",
                     color = Color.White.copy(alpha = 0.8f),
